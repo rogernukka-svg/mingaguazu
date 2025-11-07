@@ -21,7 +21,9 @@ const EMPTY_FORM = {
   ocupacion: "",
   barrio: "",
   lugarVotacion: "",
-  afiliacion: "No afiliado",
+  afiliacion: "No afiliado",   // 🔹 Nuevo: estado de afiliación
+  etapa: "Etapa 1",            // 🔹 Nuevo: etapa del proceso
+  estadoVoto: "Estambay",      // 🔹 Nuevo: estado del voto
   contacto: "Contacto",
 };
 
@@ -250,7 +252,8 @@ function NormalUserPanel({ currentUser, voters, setVoters }) {
     { name: "San Antonio", coords: [-25.495, -54.750] },
   ];
 
-  const handleChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const handleChange = (e) =>
+    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -265,6 +268,34 @@ function NormalUserPanel({ currentUser, voters, setVoters }) {
     };
     setVoters((prev) => [newVoter, ...prev]);
     setForm(EMPTY_FORM);
+  };
+
+  const toggleEstadoVoto = (id) => {
+    setVoters((prev) =>
+      prev.map((v) =>
+        v.id === id
+          ? {
+              ...v,
+              estadoVoto: v.estadoVoto === "Votó" ? "Estambay" : "Votó",
+              etapa: "Etapa 2",
+            }
+          : v
+      )
+    );
+  };
+
+  const exportTxt = (lista) => {
+    const text = lista
+      .map(
+        (v, i) =>
+          `${i + 1}. ${v.fullName} | ${v.barrio} | ${v.afiliacion} | ${v.etapa} | ${v.estadoVoto}`
+      )
+      .join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "reporte_votantes.txt";
+    link.click();
   };
 
   const calcularDatos = (barrio) => {
@@ -291,7 +322,7 @@ function NormalUserPanel({ currentUser, voters, setVoters }) {
       doc.text(
         `${i + 1}. ${v.fullName} — ${v.cedula || "Sin CI"} — ${
           v.phone || "Sin teléfono"
-        } — ${v.barrio}`,
+        } — ${v.barrio} — ${v.afiliacion} — ${v.etapa} — ${v.estadoVoto}`,
         10,
         y
       );
@@ -338,21 +369,45 @@ function NormalUserPanel({ currentUser, voters, setVoters }) {
             <input name="phone" placeholder="Teléfono o WhatsApp" value={form.phone} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2" />
             <input name="barrio" placeholder="Barrio" value={form.barrio} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2" />
             <input name="lugarVotacion" placeholder="Lugar de votación" value={form.lugarVotacion} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2" />
+
+            {/* 🔹 Afiliación */}
+            <select name="afiliacion" value={form.afiliacion} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2">
+              <option value="Afiliado">Afiliado</option>
+              <option value="No afiliado">No afiliado</option>
+              <option value="Simpatizante">Simpatizante</option>
+            </select>
+
             <button type="submit" className="w-full bg-red-600 hover:bg-red-500 text-black font-semibold rounded-lg py-2">Guardar registro</button>
           </form>
 
-          {/* === Buscador + PDF === */}
+          {/* === Buscador + PDF + TXT === */}
           <div className="mt-6">
             <h3 className="text-red-400 font-semibold mb-2 text-sm">Buscar votante</h3>
             <input type="text" placeholder="Buscar por nombre, cédula o teléfono..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2 text-sm" />
-            <div className="flex justify-between items-center mt-3">
+            <div className="flex justify-between items-center mt-3 gap-2">
+              <button onClick={() => exportPDF(filteredVoters)} className="bg-red-600 hover:bg-red-500 text-black text-xs font-semibold px-3 py-1 rounded-lg shadow">📄 PDF</button>
+              <button onClick={() => exportTxt(filteredVoters)} className="bg-blue-500 hover:bg-blue-400 text-black text-xs font-semibold px-3 py-1 rounded-lg shadow">🖨️ TXT</button>
               <p className="text-xs text-gray-400">Resultados: {filteredVoters.length}</p>
-              <button onClick={() => exportPDF(filteredVoters)} className="bg-red-600 hover:bg-red-500 text-black text-xs font-semibold px-3 py-1 rounded-lg shadow">📄 Exportar PDF</button>
             </div>
+
+            {/* === Lista de votantes === */}
             <ul className="mt-3 max-h-[200px] overflow-y-auto text-xs text-gray-300 space-y-1">
               {filteredVoters.length > 0 ? filteredVoters.map((v) => (
-                <li key={v.id} className="border-b border-neutral-800 py-1">
-                  <span className="text-red-400 font-semibold">{v.fullName}</span> — {v.cedula || "Sin CI"} — {v.phone || "Sin teléfono"} — {v.barrio}
+                <li key={v.id} className="border-b border-neutral-800 py-1 flex justify-between items-center">
+                  <div>
+                    <span className="text-red-400 font-semibold">{v.fullName}</span> — {v.barrio}
+                    <span className="block text-[11px] text-gray-400">
+                      {v.afiliacion} | {v.etapa} | {v.estadoVoto}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => toggleEstadoVoto(v.id)}
+                    className={`px-2 py-1 rounded-md text-[11px] font-semibold ${
+                      v.estadoVoto === "Votó" ? "bg-green-500 text-black" : "bg-gray-600 text-white"
+                    }`}
+                  >
+                    {v.estadoVoto === "Votó" ? "✔️ Votó" : "🕓 Estambay"}
+                  </button>
                 </li>
               )) : <p className="text-gray-500 text-xs italic">No se encontraron resultados.</p>}
             </ul>
