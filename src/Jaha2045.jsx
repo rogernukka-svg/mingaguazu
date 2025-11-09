@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import mapaBase from "./assets/mapa1.png"; // ✅ Ruta correcta
-import rodrigoPhoto from "./assets/rodrigo.png"; // 🧠 Foto de Rodrigo
+import mapaBase from "./assets/mapa1.png";
+import rodrigoPhoto from "./assets/rodrigo.png";
 
 export default function Jaha2045({ onLogin = () => {} }) {
   const [loading, setLoading] = useState(true);
@@ -101,11 +101,24 @@ export default function Jaha2045({ onLogin = () => {} }) {
     const t2 = setTimeout(() => {
       setScanStep(2);
 
-      // 🎤 Audio de bienvenida de Rodrigo
+      // 🎤 Audio de bienvenida de Rodrigo (desde /public/assets/)
       if (pendingUser.code === "51554163") {
-        const welcome = new Audio("/src/assets/welcome-rodrigo.mp3");
+        const welcome = new Audio("/assets/welcome-rodrigo.mp3");
         welcome.volume = 0.9;
-        welcome.play().catch(() => {});
+
+        // Intento de reproducción con desbloqueo si el navegador bloquea
+        const tryPlay = () => {
+          welcome.play().catch(() => {
+            console.warn("⚠️ Chrome bloqueó el audio, esperando clic...");
+            const unlock = () => {
+              welcome.play().catch(() => {});
+              document.removeEventListener("click", unlock);
+            };
+            document.addEventListener("click", unlock);
+          });
+        };
+
+        tryPlay();
       } else {
         const accessSound = new Audio("/assets/access-granted.mp3");
         accessSound.volume = 0.6;
@@ -127,7 +140,7 @@ export default function Jaha2045({ onLogin = () => {} }) {
       setIsScanning(false);
       setScanStep(0);
       onLogin(pendingUser);
-    }, 8000); // dura más para dejar sonar el audio
+    }, 8000);
 
     return () => {
       clearTimeout(t1);
