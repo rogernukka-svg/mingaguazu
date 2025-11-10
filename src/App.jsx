@@ -21,9 +21,9 @@ const EMPTY_FORM = {
   ocupacion: "",
   barrio: "",
   lugarVotacion: "",
-  afiliacion: "No afiliado",   // 🔹 Nuevo: estado de afiliación
-  etapa: "Etapa 1",            // 🔹 Nuevo: etapa del proceso
-  estadoVoto: "Estambay",      // 🔹 Nuevo: estado del voto
+  afiliacion: "No afiliado",
+  etapa: "Etapa 1",
+  estadoVoto: "Estambay",
   contacto: "Contacto",
 };
 
@@ -45,6 +45,10 @@ function BarrioModal({ barrio, datos, onClose }) {
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fadeIn">
       <div className="bg-neutral-900 border border-red-700/40 rounded-2xl p-6 w-[90%] max-w-md text-gray-100 shadow-[0_0_25px_rgba(255,0,0,0.3)]">
         <h2 className="text-xl font-bold text-red-500 mb-2">🏘️ {barrio}</h2>
+
+        <p className="text-sm text-gray-400 mb-1">
+          Votantes registrados: <b>{datos.total}</b>
+        </p>
         <p className="text-sm text-gray-400 mb-4">
           Participación estimada: <b>{participacion}%</b>
         </p>
@@ -93,7 +97,7 @@ function LoginScreen({ users, setUsers, onLogin }) {
       const parsed = JSON.parse(savedUser);
       onLogin(parsed);
     }
-  }, []);
+  }, [onLogin]);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -236,13 +240,26 @@ function LoginScreen({ users, setUsers, onLogin }) {
   );
 }
 
-/* === PANEL NORMAL === */
-function NormalUserPanel({ currentUser, voters, setVoters }) {
+/* Helper: color según porcentaje */
+function getPinColorClasses(porcentaje) {
+  if (porcentaje >= 71) {
+    return "bg-green-500 border-green-400 text-black";
+  }
+  if (porcentaje >= 41) {
+    return "bg-yellow-300 border-yellow-400 text-black";
+  }
+  return "bg-red-600 border-red-500 text-white";
+}
+
+/* === PANEL NORMAL (COORDINADORES) === */
+function NormalUserPanel({ currentUser, voters, setVoters, users }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [searchTerm, setSearchTerm] = useState("");
   const [barrioModal, setBarrioModal] = useState(null);
 
   const MINGA_CENTER = [-25.508, -54.763];
+
+  /* 12 puntos para los 12 equipos/coordinadores */
   const barrios = [
     { name: "Km 10 Acaray", coords: [-25.475, -54.746] },
     { name: "Km 12 Monday", coords: [-25.486, -54.754] },
@@ -250,7 +267,38 @@ function NormalUserPanel({ currentUser, voters, setVoters }) {
     { name: "Km 16 Monday", coords: [-25.507, -54.771] },
     { name: "Km 18", coords: [-25.518, -54.784] },
     { name: "San Antonio", coords: [-25.495, -54.750] },
+    { name: "San Blas", coords: [-25.490, -54.757] },
+    { name: "Don Bosco", coords: [-25.481, -54.744] },
+    { name: "Jardín del Este", coords: [-25.499, -54.767] },
+    { name: "Villa 23", coords: [-25.512, -54.776] },
+    { name: "Las Carmelitas", coords: [-25.504, -54.753] },
+    { name: "San Roque", coords: [-25.493, -54.761] },
   ];
+
+  const todayStr = new Date().toLocaleDateString();
+
+  /* === Ranking de coordinadores (competencia sana) === */
+  const coordinadoresStats = users
+    .filter((u) => u.role === "normal")
+    .map((u) => {
+      const total = voters.filter((v) => v.createdById === u.id).length;
+      const hoy = voters.filter(
+        (v) => v.createdById === u.id && v.date === todayStr
+      ).length;
+      return { ...u, total, hoy };
+    })
+    .sort((a, b) => b.total - a.total);
+
+  const totalCoordinadores = coordinadoresStats.length;
+  const maxTotalCoord =
+    totalCoordinadores > 0
+      ? Math.max(...coordinadoresStats.map((c) => c.total))
+      : 0;
+
+  const myEntryIndex = coordinadoresStats.findIndex(
+    (c) => c.id === currentUser.id
+  );
+  const myPosition = myEntryIndex !== -1 ? myEntryIndex + 1 : null;
 
   const handleChange = (e) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -264,7 +312,7 @@ function NormalUserPanel({ currentUser, voters, setVoters }) {
       ...form,
       createdById: currentUser.id,
       createdByName: currentUser.name,
-      date: new Date().toLocaleDateString(),
+      date: todayStr,
     };
     setVoters((prev) => [newVoter, ...prev]);
     setForm(EMPTY_FORM);
@@ -298,16 +346,27 @@ function NormalUserPanel({ currentUser, voters, setVoters }) {
     link.click();
   };
 
+  /* === Datos reales por barrio para el modal (no random) === */
   const calcularDatos = (barrio) => {
     const total = voters.filter((v) => v.barrio === barrio).length;
-    const porcentaje = Math.min(100, Math.round(Math.random() * 100));
-    const participacion = Math.round(50 + Math.random() * 50);
+
+    const totalesPorBarrio = barrios.map(
+      (b) => voters.filter((v) => v.barrio === b.name).length
+    );
+    const maxTotal = Math.max(1, ...totalesPorBarrio);
+
+    const porcentaje = total === 0 ? 0 : Math.round((total / maxTotal) * 100);
+    const participacion = Math.min(100, porcentaje + 30);
+
     let mensaje =
       porcentaje > 75
         ? "Alta probabilidad de apoyo"
         : porcentaje > 50
         ? "Tendencia positiva"
+        : total === 0
+        ? "Zona aún sin trabajo, prioridad para visitar"
         : "Requiere más trabajo territorial";
+
     return { total, porcentaje, participacion, mensaje };
   };
 
@@ -349,12 +408,15 @@ function NormalUserPanel({ currentUser, voters, setVoters }) {
   };
 
   const reporteDiario = () => {
-    const totalHoy = voters.filter(
-      (v) => v.date === new Date().toLocaleDateString()
-    ).length;
-    return `📅 Reporte Diario JAHA 2041\n👤 Usuario: ${currentUser.name}\n📍 Total registrados hoy: ${totalHoy}\n📞 Último teléfono: ${
-      voters[0]?.phone || "N/A"
-    }\n✅ Total general: ${voters.length}`;
+    const totalHoy = voters.filter((v) => v.date === todayStr).length;
+    const textoPosicion =
+      myPosition && totalCoordinadores > 0
+        ? `\n🏆 Posición: #${myPosition} de ${totalCoordinadores} coordinadores`
+        : "";
+    return `📅 Reporte Diario JAHA 2041
+👤 Usuario: ${currentUser.name}
+📍 Total registrados hoy: ${totalHoy}
+✅ Total general: ${voters.length}${textoPosicion}`;
   };
 
   return (
@@ -364,77 +426,250 @@ function NormalUserPanel({ currentUser, voters, setVoters }) {
         <div className="bg-neutral-900/80 border border-red-700/40 rounded-2xl p-4">
           <h2 className="text-lg font-semibold mb-2 text-red-400">Registrar votante</h2>
           <form onSubmit={handleSubmit} className="space-y-3 text-sm">
-            <input name="fullName" placeholder="Nombre y Apellido" value={form.fullName} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2" />
-            <input name="cedula" placeholder="Cédula" value={form.cedula} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2" />
-            <input name="phone" placeholder="Teléfono o WhatsApp" value={form.phone} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2" />
-            <input name="barrio" placeholder="Barrio" value={form.barrio} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2" />
-            <input name="lugarVotacion" placeholder="Lugar de votación" value={form.lugarVotacion} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2" />
+            <input
+              name="fullName"
+              placeholder="Nombre y Apellido"
+              value={form.fullName}
+              onChange={handleChange}
+              className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2"
+            />
+            <input
+              name="cedula"
+              placeholder="Cédula"
+              value={form.cedula}
+              onChange={handleChange}
+              className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2"
+            />
+            <input
+              name="phone"
+              placeholder="Teléfono o WhatsApp"
+              value={form.phone}
+              onChange={handleChange}
+              className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2"
+            />
+            <input
+              name="barrio"
+              placeholder="Barrio"
+              value={form.barrio}
+              onChange={handleChange}
+              className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2"
+            />
+            <input
+              name="lugarVotacion"
+              placeholder="Lugar de votación"
+              value={form.lugarVotacion}
+              onChange={handleChange}
+              className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2"
+            />
 
             {/* 🔹 Afiliación */}
-            <select name="afiliacion" value={form.afiliacion} onChange={handleChange} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2">
+            <select
+              name="afiliacion"
+              value={form.afiliacion}
+              onChange={handleChange}
+              className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2"
+            >
               <option value="Afiliado">Afiliado</option>
               <option value="No afiliado">No afiliado</option>
               <option value="Simpatizante">Simpatizante</option>
             </select>
 
-            <button type="submit" className="w-full bg-red-600 hover:bg-red-500 text-black font-semibold rounded-lg py-2">Guardar registro</button>
+            <button
+              type="submit"
+              className="w-full bg-red-600 hover:bg-red-500 text-black font-semibold rounded-lg py-2"
+            >
+              Guardar registro
+            </button>
           </form>
 
           {/* === Buscador + PDF + TXT === */}
           <div className="mt-6">
             <h3 className="text-red-400 font-semibold mb-2 text-sm">Buscar votante</h3>
-            <input type="text" placeholder="Buscar por nombre, cédula o teléfono..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2 text-sm" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, cédula o teléfono..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-black border border-neutral-700 rounded-lg px-3 py-2 text-sm"
+            />
             <div className="flex justify-between items-center mt-3 gap-2">
-              <button onClick={() => exportPDF(filteredVoters)} className="bg-red-600 hover:bg-red-500 text-black text-xs font-semibold px-3 py-1 rounded-lg shadow">📄 PDF</button>
-              <button onClick={() => exportTxt(filteredVoters)} className="bg-blue-500 hover:bg-blue-400 text-black text-xs font-semibold px-3 py-1 rounded-lg shadow">🖨️ TXT</button>
+              <button
+                onClick={() => exportPDF(filteredVoters)}
+                className="bg-red-600 hover:bg-red-500 text-black text-xs font-semibold px-3 py-1 rounded-lg shadow"
+              >
+                📄 PDF
+              </button>
+              <button
+                onClick={() => exportTxt(filteredVoters)}
+                className="bg-blue-500 hover:bg-blue-400 text-black text-xs font-semibold px-3 py-1 rounded-lg shadow"
+              >
+                🖨️ TXT
+              </button>
               <p className="text-xs text-gray-400">Resultados: {filteredVoters.length}</p>
             </div>
 
             {/* === Lista de votantes === */}
             <ul className="mt-3 max-h-[200px] overflow-y-auto text-xs text-gray-300 space-y-1">
-              {filteredVoters.length > 0 ? filteredVoters.map((v) => (
-                <li key={v.id} className="border-b border-neutral-800 py-1 flex justify-between items-center">
-                  <div>
-                    <span className="text-red-400 font-semibold">{v.fullName}</span> — {v.barrio}
-                    <span className="block text-[11px] text-gray-400">
-                      {v.afiliacion} | {v.etapa} | {v.estadoVoto}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => toggleEstadoVoto(v.id)}
-                    className={`px-2 py-1 rounded-md text-[11px] font-semibold ${
-                      v.estadoVoto === "Votó" ? "bg-green-500 text-black" : "bg-gray-600 text-white"
-                    }`}
+              {filteredVoters.length > 0 ? (
+                filteredVoters.map((v) => (
+                  <li
+                    key={v.id}
+                    className="border-b border-neutral-800 py-1 flex justify-between items-center"
                   >
-                    {v.estadoVoto === "Votó" ? "✔️ Votó" : "🕓 Estambay"}
-                  </button>
-                </li>
-              )) : <p className="text-gray-500 text-xs italic">No se encontraron resultados.</p>}
+                    <div>
+                      <span className="text-red-400 font-semibold">{v.fullName}</span> — {v.barrio}
+                      <span className="block text-[11px] text-gray-400">
+                        {v.afiliacion} | {v.etapa} | {v.estadoVoto}
+                      </span>
+                      <span className="block text-[10px] text-gray-500">
+                        Coordinador: {v.createdByName}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => toggleEstadoVoto(v.id)}
+                      className={`px-2 py-1 rounded-md text-[11px] font-semibold ${
+                        v.estadoVoto === "Votó"
+                          ? "bg-green-500 text-black"
+                          : "bg-gray-600 text-white"
+                      }`}
+                    >
+                      {v.estadoVoto === "Votó" ? "✔️ Votó" : "🕓 Estambay"}
+                    </button>
+                  </li>
+                ))
+              ) : (
+                <p className="text-gray-500 text-xs italic">
+                  No se encontraron resultados.
+                </p>
+              )}
             </ul>
           </div>
+
+          {/* 🏆 Ranking de coordinadores */}
+          {totalCoordinadores > 0 && (
+            <div className="mt-6 border-t border-neutral-800 pt-4">
+              <h3 className="text-red-400 font-semibold text-sm mb-1">
+                🏆 Ranking de coordinadores
+              </h3>
+              {myPosition && (
+                <p className="text-[11px] text-gray-300 mb-2">
+                  Tu posición actual: <b>#{myPosition}</b> de {totalCoordinadores} coordinadores.
+                </p>
+              )}
+              <ul className="space-y-2 text-xs">
+                {coordinadoresStats.slice(0, 6).map((c, index) => {
+                  const isMe = c.id === currentUser.id;
+                  const width =
+                    maxTotalCoord > 0 ? Math.max(8, (c.total / maxTotalCoord) * 100) : 0;
+                  return (
+                    <li
+                      key={c.id}
+                      className={`rounded-lg px-2 py-2 border border-neutral-800 ${
+                        isMe ? "bg-red-900/40 border-red-600" : "bg-neutral-900/70"
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold">
+                          #{index + 1} {c.name}
+                        </span>
+                        <span className="text-[11px] text-gray-300">
+                          {c.total} registros
+                        </span>
+                      </div>
+                      <div className="w-full bg-neutral-800 rounded-full h-2 mt-1 overflow-hidden">
+                        <div
+                          className={`h-2 ${
+                            isMe ? "bg-gradient-to-r from-red-400 to-red-600" : "bg-red-700/70"
+                          }`}
+                          style={{ width: `${width}%` }}
+                        />
+                      </div>
+                      {c.hoy > 0 && (
+                        <p className="text-[10px] text-emerald-400 mt-1">
+                          +{c.hoy} hoy — buen trabajo en tu zona.
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* === Mapa === */}
-        <div className="bg-neutral-900/80 border border-red-700/40 rounded-2xl overflow-hidden">
-          <h3 className="font-semibold mb-2 p-3 text-sm text-red-400">Mapa de Minga Guazú</h3>
-          <MapContainer center={MINGA_CENTER} zoom={14} className="h-[400px] rounded-xl z-0">
-            <ChangeView coords={MINGA_CENTER} />
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {barrios.map((b) => (
-              <Marker
-                key={b.name}
-                position={b.coords}
-                icon={L.divIcon({
-                  className: "bg-white text-red-700 text-[11px] font-bold px-2 py-1 rounded-full border border-red-500 shadow-lg",
-                  html: `<div>${b.name}</div>`,
-                })}
-                eventHandlers={{
-                  click: () => setBarrioModal({ name: b.name, datos: calcularDatos(b.name) }),
-                }}
-              />
-            ))}
-          </MapContainer>
+<div className="bg-neutral-900/80 border border-red-700/40 rounded-2xl overflow-hidden">
+  <h3 className="font-semibold mb-2 p-3 text-sm text-red-400">Mapa de Minga Guazú</h3>
+  <MapContainer center={MINGA_CENTER} zoom={14} className="h-[400px] rounded-xl z-0">
+    <ChangeView coords={MINGA_CENTER} />
+    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+    {barrios.map((b, index) => {
+      const numero = index + 1;
+
+      // Tomamos el coordinador según la posición en el ranking
+      const coordData = coordinadoresStats[index];
+      const totalCoord = coordData?.total || 0;
+      const porcentajeCoord =
+        maxTotalCoord > 0 && totalCoord > 0
+          ? Math.round((totalCoord / maxTotalCoord) * 100)
+          : 0;
+
+      const color =
+        porcentajeCoord >= 70
+          ? "#22c55e" // verde
+          : porcentajeCoord >= 40
+          ? "#facc15" // amarillo
+          : "#ef4444"; // rojo
+
+      const nombreCorto = coordData
+        ? coordData.name.split(" ").slice(0, 2).join(" ")
+        : `Equipo ${numero}`;
+
+      // 📍 Emoji animado con efecto de latido (pulse)
+      const html = `
+        <style>
+          @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+          }
+        </style>
+        <div class="flex flex-col items-center justify-center">
+          <div style="
+            font-size:22px;
+            line-height:1;
+            animation:pulse 2s infinite ease-in-out;
+            text-shadow:0 0 6px ${color}, 0 0 12px ${color};
+          ">
+            📍
+          </div>
+          <div class="mt-0.5 text-[10px] font-semibold text-black bg-white/90 px-2 py-0.5 rounded-md shadow">
+            Equipo ${numero}
+          </div>
         </div>
+      `;
+
+      return (
+        <Marker
+          key={b.name}
+          position={b.coords}
+          icon={L.divIcon({
+            className: "cursor-pointer",
+            html,
+          })}
+          eventHandlers={{
+            click: () =>
+              setBarrioModal({
+                name: b.name,
+                datos: calcularDatos(b.name),
+              }),
+          }}
+        />
+      );
+    })}
+  </MapContainer>
+</div>
+
       </section>
 
       {/* === Reporte Diario === */}
@@ -477,7 +712,8 @@ function AdminGeneralPanel({ voters, users }) {
       <ul className="text-sm">
         {voters.map((v) => (
           <li key={v.id}>
-            {v.fullName} — {v.phone || "Sin teléfono"} — {v.barrio} (<span className="text-gray-400">{v.createdByName}</span>)
+            {v.fullName} — {v.phone || "Sin teléfono"} — {v.barrio} (
+            <span className="text-gray-400">{v.createdByName}</span>)
           </li>
         ))}
       </ul>
@@ -509,7 +745,12 @@ export default function App() {
       ) : currentUser.role === "general" ? (
         <AdminGeneralPanel voters={voters} users={users} />
       ) : (
-        <NormalUserPanel currentUser={currentUser} voters={voters} setVoters={setVoters} />
+        <NormalUserPanel
+          currentUser={currentUser}
+          voters={voters}
+          setVoters={setVoters}
+          users={users}
+        />
       )}
       <Footer />
     </div>
