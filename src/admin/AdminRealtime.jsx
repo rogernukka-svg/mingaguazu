@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { getSupabase } from "../supabaseClient.js";
-import AsistenteFlotante from "./AsistenteFlotante"; // 👈 Importa el nuevo asistente
+import AsistenteFlotante from "./AsistenteFlotante";
 
 const supabase = getSupabase();
 
@@ -11,6 +11,7 @@ export default function AdminRealtime() {
   const [voters, setVoters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [coordinadores, setCoordinadores] = useState([]);
+  const [filterBarrio, setFilterBarrio] = useState("todos");
 
   /* === Cargar y conectar datos en tiempo real === */
   useEffect(() => {
@@ -65,6 +66,16 @@ export default function AdminRealtime() {
     </style>
   `;
 
+  /* === Exportar CSV === */
+  const exportarCSV = () => {
+    const csv = voters.map((v) => `${v.fullName},${v.barrio},${v.estadoVoto}`).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "reporte_votantes.csv";
+    link.click();
+  };
+
   /* === Render principal === */
   return (
     <main className="min-h-screen bg-gradient-to-b from-black via-neutral-900 to-black text-gray-100 flex flex-col">
@@ -101,6 +112,16 @@ export default function AdminRealtime() {
               <span className="w-3 h-3 bg-emerald-400 rounded-full animate-ping"></span>
               🟢 Sistema Activo
             </p>
+            {/* 🚪 BOTÓN DE CIERRE DE SESIÓN */}
+            <button
+              onClick={() => {
+                localStorage.removeItem("jaha_user");
+                window.location.href = "/";
+              }}
+              className="mt-2 text-sm px-3 py-1.5 rounded-lg border border-red-700 text-red-400 hover:bg-red-700/20 transition-colors"
+            >
+              🚪 Cerrar sesión
+            </button>
           </div>
         </div>
 
@@ -131,6 +152,28 @@ export default function AdminRealtime() {
             🌍 Mapa en Vivo — Coordinadores Activos
           </h2>
 
+          {/* Filtro de barrios */}
+          <div className="flex justify-center sm:justify-start mb-2">
+            <select
+              value={filterBarrio}
+              onChange={(e) => setFilterBarrio(e.target.value)}
+              className="bg-black/80 border border-red-600 text-red-400 px-2 py-1 rounded-lg text-sm"
+            >
+              <option value="todos">Todos los barrios</option>
+              <option value="San José">San José</option>
+              <option value="Santa Ana">Santa Ana</option>
+              <option value="Don Bosco">Don Bosco</option>
+              <option value="La Amistad">La Amistad</option>
+            </select>
+          </div>
+
+          {/* Alerta inteligente */}
+          {porcentaje > 80 && (
+            <div className="text-center bg-green-900/30 text-green-300 py-2 rounded-lg border border-green-600/50 mb-2 animate-pulse">
+              🎉 ¡Excelente! Más del 80% de participación alcanzada.
+            </div>
+          )}
+
           <MapContainer
             center={[-25.5, -54.76]}
             zoom={13}
@@ -138,25 +181,27 @@ export default function AdminRealtime() {
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-            {voters.map((v) => (
-              <Marker
-                key={v.id}
-                position={[
-                  -25.48 + Math.random() * 0.04,
-                  -54.77 + Math.random() * 0.03,
-                ]}
-                icon={L.divIcon({
-                  html: markerHTML,
-                  className: "cursor-pointer",
-                })}
-              >
-                <Popup>
-                  <b>{v.fullName}</b> <br />
-                  🏠 {v.barrio} <br />
-                  🗳️ Estado: <b>{v.estadoVoto}</b>
-                </Popup>
-              </Marker>
-            ))}
+            {voters
+              .filter((v) => filterBarrio === "todos" || v.barrio === filterBarrio)
+              .map((v) => (
+                <Marker
+                  key={v.id}
+                  position={[
+                    -25.48 + Math.random() * 0.04,
+                    -54.77 + Math.random() * 0.03,
+                  ]}
+                  icon={L.divIcon({
+                    html: markerHTML,
+                    className: "cursor-pointer",
+                  })}
+                >
+                  <Popup>
+                    <b>{v.fullName}</b> <br />
+                    🏠 {v.barrio} <br />
+                    🗳️ Estado: <b>{v.estadoVoto}</b>
+                  </Popup>
+                </Marker>
+              ))}
 
             {/* Radar circular animado */}
             {window.innerWidth > 768 && (
@@ -215,6 +260,14 @@ export default function AdminRealtime() {
                   ></div>
                 </div>
               </div>
+
+              {/* === Botón Exportar CSV === */}
+              <button
+                onClick={exportarCSV}
+                className="mb-4 bg-gradient-to-r from-red-600 to-red-400 text-black font-semibold px-3 py-2 rounded-md hover:scale-105 transition-transform"
+              >
+                📤 Exportar CSV
+              </button>
 
               {/* === RANKING === */}
               <h3 className="text-red-400 font-semibold mb-2 text-center sm:text-left">
