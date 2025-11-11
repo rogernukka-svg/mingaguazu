@@ -39,7 +39,7 @@ export default function AsistenteFlotante() {
     }
   };
 
-  /* === INTELIGENCIA BÁSICA (RESPUESTAS + CONTEXTO) === */
+  /* === INTELIGENCIA BÁSICA === */
   const generateResponse = (userInput) => {
     const lower = userInput.toLowerCase();
     let response = "";
@@ -105,17 +105,17 @@ export default function AsistenteFlotante() {
 
   return (
     <>
-      {/* 🔴 BOTÓN FLOTANTE */}
+      {/* 🔴 BOTÓN FLOTANTE (alzamos el botón) */}
       <button
         onClick={() => setOpen(!open)}
-        className="fixed bottom-5 right-5 bg-gradient-to-r from-red-600 to-black text-white p-4 rounded-full shadow-lg hover:scale-110 transition-transform animate-pulse"
+        className="fixed bottom-24 right-5 bg-gradient-to-r from-red-600 to-black text-white p-4 rounded-full shadow-lg hover:scale-110 transition-transform animate-pulse z-50"
       >
         {open ? <X size={24} /> : <MessageCircle size={24} />}
       </button>
 
-      {/* 💬 BURBUJA DE CHAT */}
+      {/* 💬 BURBUJA DE CHAT (también alzada) */}
       {open && (
-        <div className="fixed bottom-20 right-5 w-80 sm:w-96 bg-gradient-to-b from-black via-neutral-900 to-red-950 border border-red-600/50 rounded-2xl shadow-[0_0_40px_rgba(255,0,0,0.5)] flex flex-col overflow-hidden animate-fadeIn backdrop-blur-md">
+        <div className="fixed bottom-36 right-5 w-80 sm:w-96 bg-gradient-to-b from-black via-neutral-900 to-red-950 border border-red-600/50 rounded-2xl shadow-[0_0_40px_rgba(255,0,0,0.5)] flex flex-col overflow-hidden animate-fadeIn backdrop-blur-md z-50">
           {/* ENCABEZADO */}
           <div className="flex justify-between items-center bg-gradient-to-r from-red-800 via-red-700 to-black text-white px-3 py-2 shadow-inner border-b border-red-600/40">
             <div className="flex items-center gap-2">

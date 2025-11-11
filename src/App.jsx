@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { jsPDF } from "jspdf";
 import Navbar from "./components/Navbar.jsx";
 import Footer from "./components/Footer.jsx";
+import { getSupabase } from "./supabaseClient.js";
+
+const supabase = getSupabase();
+
+
 
 /* === Usuarios iniciales === */
 const INITIAL_USERS = [
@@ -80,6 +85,138 @@ function BarrioModal({ barrio, datos, onClose }) {
     </div>
   );
 }
+/* === ASISTENTE FLOTANTE DE MENSAJERÍA === */
+function AsistenteFlotante({ currentUser }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+  const [hasNew, setHasNew] = useState(false);
+  const bottomRef = useRef(null);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    loadMessages();
+
+    const channel = supabase
+      .channel("realtime-messages")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        setMessages((prev) => [...prev, payload.new]);
+        if (!open) {
+          setHasNew(true);
+          audioRef.current?.play().catch(() => {});
+        }
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [open]);
+
+  async function loadMessages() {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .order("created_at", { ascending: true });
+
+    if (!error) setMessages(data || []);
+  }
+
+  async function sendMessage(e) {
+    e.preventDefault();
+    if (!text.trim()) return;
+
+    const { error } = await supabase.from("messages").insert([
+      {
+        sender_id: currentUser?.id || null,
+        sender_name: currentUser?.name || "Invitado",
+        sender_role: currentUser?.role || "normal",
+        role: currentUser?.role || "normal",
+        content: text.trim(),
+      },
+    ]);
+
+    if (error) {
+      console.error("Error al enviar mensaje:", error);
+    } else {
+      setText("");
+    }
+  }
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  return (
+    <>
+      <audio ref={audioRef} src="/sfx/notify.mp3" preload="auto" />
+      <div className="fixed bottom-6 right-6 z-[999]">
+        <button
+          onClick={() => {
+            setOpen(!open);
+            setHasNew(false);
+          }}
+          className="relative bg-red-600 hover:bg-red-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg shadow-red-700/40 transition-transform hover:scale-110"
+        >
+          💬
+          {hasNew && (
+            <span className="absolute -top-1 -right-1 bg-emerald-400 text-black text-[10px] font-bold rounded-full px-1.5 py-0.5 animate-pulse">
+              ●
+            </span>
+          )}
+        </button>
+
+        {open && (
+          <div className="absolute bottom-20 right-0 bg-neutral-900 border border-red-700/40 rounded-2xl w-80 h-96 flex flex-col shadow-[0_0_25px_rgba(255,0,0,0.4)] overflow-hidden animate-fadeIn">
+            <div className="bg-red-700/40 text-center py-2 font-semibold text-sm text-white">
+              Canal JAHA 2041
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2 space-y-2">
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`p-2 rounded-lg text-xs ${
+                    m.sender_role === "general"
+                      ? "bg-red-700/40 text-white self-end ml-auto"
+                      : "bg-gray-800 text-gray-200"
+                  }`}
+                >
+                  <p className="font-semibold text-[10px] text-gray-400 mb-0.5">
+                    {m.sender_name}{" "}
+                    <span className="text-gray-500">
+                      {new Date(m.created_at).toLocaleTimeString("es-PY", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </p>
+                  <p>{m.content}</p>
+                </div>
+              ))}
+              <div ref={bottomRef}></div>
+            </div>
+
+            <form onSubmit={sendMessage} className="p-2 border-t border-red-700/40 flex gap-2">
+              <input
+                type="text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Escribe un mensaje..."
+                className="flex-1 bg-black border border-neutral-700 rounded-lg px-2 py-1 text-xs text-white"
+              />
+              <button
+                type="submit"
+                className="bg-red-600 hover:bg-red-500 text-black rounded-lg px-3 text-xs font-semibold"
+              >
+                ➤
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 
 /* === LOGIN === */
 function LoginScreen({ users, setUsers, onLogin }) {
@@ -737,9 +874,12 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  return (
+    return (
     <div className="min-h-screen bg-black text-gray-100">
+      {/* 🧭 Barra de navegación */}
       <Navbar currentUser={currentUser} onLogout={handleLogout} />
+
+      {/* 👤 Pantallas principales según tipo de usuario */}
       {!currentUser ? (
         <LoginScreen users={users} setUsers={setUsers} onLogin={setCurrentUser} />
       ) : currentUser.role === "general" ? (
@@ -752,7 +892,12 @@ export default function App() {
           users={users}
         />
       )}
+
+      {/* ⚙️ Pie de página */}
       <Footer />
+
+      {/* 💬 Asistente flotante de mensajería */}
+      {currentUser && <AsistenteFlotante currentUser={currentUser} />}
     </div>
   );
 }

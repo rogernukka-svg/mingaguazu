@@ -1,52 +1,54 @@
-import React from 'react'
+import React from 'react';
 
-const EJES = [
+const BLOQUES = [
   {
-    title: 'Transparencia y Gobierno Abierto',
-    desc: 'Cuentas claras, portal público, participación real en las decisiones y control ciudadano.',
+    title: 'Usuario Normal',
+    desc: 'Inicia sesión, registra nuevos votantes y solo puede ver / editar los que él mismo cargó.',
   },
   {
-    title: 'Seguridad Ciudadana y Comunitaria',
-    desc: 'Barrios iluminados, presencia coordinada con la comunidad y enfoque preventivo.',
+    title: 'Súper Usuario',
+    desc: 'Ve toda la base, filtra por barrio, lugar de votación, estados y usuario que registró.',
   },
   {
-    title: 'Desarrollo Social e Inclusión',
-    desc: 'Oportunidades para jóvenes, mujeres, adultos mayores y personas con discapacidad.',
+    title: 'Exportación',
+    desc: 'Desde el panel de administrador se pueden exportar los votantes filtrados a CSV / Excel.',
   },
   {
-    title: 'Sector Agrícola y Producción Local',
-    desc: 'Apoyo técnico, ferias, mercado municipal y caminos dignos para llegar con lo que producimos.',
+    title: 'Gestión de usuarios',
+    desc: 'Crear nuevos usuarios, activar / desactivar cuentas y definir el rol (normal / admin).',
   },
   {
-    title: 'Industria, Empleo y Emprendimiento',
-    desc: 'Vínculo entre industria, comercio y talento local para generar más trabajo en Minga Guazú.',
+    title: 'Mapa & Reportes',
+    desc: 'Se reserva espacio para integrar mapa georreferenciado y reportes gráficos por barrio.',
   },
   {
-    title: 'Participación Ciudadana',
-    desc: 'Cabildos, consultas digitales y JAHA APP como puente directo con la gente.',
+    title: 'Próximos pasos',
+    desc: 'Conectar este frontend a una API o directamente a Supabase para guardar todo en la nube.',
   },
-]
+];
 
 function EjesGrid() {
   return (
-    <div className="grid gap-5 md:grid-cols-3">
-      {EJES.map((eje) => (
+    <div className="grid gap-4 md:grid-cols-3">
+      {BLOQUES.map((b) => (
         <article
-          key={eje.title}
-          className="rounded-2xl border border-red-100/70 bg-red-50/60 hover:bg-red-100/70 transition-colors shadow-sm hover:shadow-md"
+          key={b.title}
+          className="rounded-2xl border border-slate-800 bg-slate-900/70 hover:bg-slate-800/80 transition-colors shadow-sm hover:shadow-md"
         >
-          <div className="p-5 h-full flex flex-col justify-between">
+          <div className="p-4 h-full flex flex-col justify-between">
             <div>
-              <h3 className="text-base md:text-lg font-semibold text-red-800 mb-2">
-                {eje.title}
+              <h3 className="text-sm md:text-base font-semibold text-emerald-300 mb-1.5">
+                {b.title}
               </h3>
-              <p className="text-sm text-red-900/80">{eje.desc}</p>
+              <p className="text-xs md:text-sm text-slate-200/90">
+                {b.desc}
+              </p>
             </div>
           </div>
         </article>
       ))}
     </div>
-  )
+  );
 }
 
-export default EjesGrid
+export default EjesGrid;
