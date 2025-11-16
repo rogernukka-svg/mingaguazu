@@ -5,15 +5,21 @@ import L from "leaflet";
 import { getSupabase } from "../supabaseClient.js";
 import AsistenteFlotante from "./AsistenteFlotante";
 import { LogOut } from "lucide-react"; 
+import { useNavigate } from "react-router-dom";
+
 
 
 const supabase = getSupabase();
 
 export default function AdminControlAsuncion() {
+  const navigate = useNavigate();
+
+  
   const [vehiculos, setVehiculos] = useState([]);
   const [coordinadores, setCoordinadores] = useState([]);
   const [puntos, setPuntos] = useState([]);
   const [loading, setLoading] = useState(true);
+  
 
   // 💬 Mensajería
   const [messages, setMessages] = useState([]);
@@ -295,16 +301,18 @@ export default function AdminControlAsuncion() {
       <p>Región: <span className="text-gray-300">Central · Capital</span></p>
 
       {/* 🔐 Botón Cerrar sesión */}
-      <button
-        onClick={async () => {
-          await supabase.auth.signOut();
-          window.location.href = "/login"; // 👈 redirección luego de cerrar sesión
-        }}
-        className="mt-1 flex items-center gap-1 text-[11px] px-2 py-1 border border-red-700/40 text-red-300 rounded-lg hover:bg-red-700/20 hover:border-red-400 transition-all"
-      >
-        <LogOut size={12} />
-        Salir
-      </button>
+<button
+  onClick={async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem("jaha_user"); // 🧹 limpiar sesión local
+    navigate("/login", { replace: true }); // 👈 evita 404 en Render
+  }}
+  className="mt-1 flex items-center gap-1 text-[11px] px-2 py-1 border border-red-700/40 text-red-300 rounded-lg hover:bg-red-700/20 hover:border-red-400 transition-all"
+>
+  <LogOut size={12} />
+  Salir
+</button>
+
     </div>
   </div>
 </header>
