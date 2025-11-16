@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import mapaBase from "./assets/mapa1.png";
 import rodrigoPhoto from "./assets/rodrigo.png";
+import tikiPhoto from "./assets/tiki.png";
 
 export default function Jaha2045({ onLogin = () => {} }) {
   const navigate = useNavigate();
@@ -24,14 +25,15 @@ export default function Jaha2045({ onLogin = () => {} }) {
     username: "",
     code: "",
   });
+/* === DATOS DE ACCESO === */
+const ACCESS_LIST = [
+  { code: "51554163", name: "Rodrigo Ríos", role: "superadmin", region: "MINGA" },
+  { code: "888999", name: "Tiki González", role: "superadmin", region: "ASUNCION" },
+  { code: "123456", name: "Coordinador Barrio San José", role: "normal", region: "MINGA" },
+  { code: "654321", name: "Coordinador Barrio Santa Ana", role: "normal", region: "MINGA" },
+  { code: "789123", name: "Supervisor General", role: "normal", region: "MINGA" },
+];
 
-  /* === DATOS DE ACCESO === */
-  const ACCESS_LIST = [
-    { code: "51554163", name: "Rodrigo Ríos", role: "superadmin" },
-    { code: "123456", name: "Coordinador Barrio San José", role: "normal" },
-    { code: "654321", name: "Coordinador Barrio Santa Ana", role: "normal" },
-    { code: "789123", name: "Supervisor General", role: "normal" },
-  ];
 
   const KEYPAD_ROWS = [
     ["1", "2", "3"],
@@ -124,50 +126,77 @@ export default function Jaha2045({ onLogin = () => {} }) {
     setShowAdminModal(false);
   };
 
-  /* === ESCANEO Y BIENVENIDA ADMIN === */
-  useEffect(() => {
-    if (!isScanning || !pendingUser) return;
+ /* === ESCANEO Y BIENVENIDA ADMIN === */
+useEffect(() => {
+  if (!isScanning || !pendingUser) return;
 
-    const scanSound = new Audio("/assets/scan.mp3");
-    scanSound.volume = 0.5;
-    scanSound.play().catch(() => {});
+  const scanSound = new Audio("/assets/scan.mp3");
+  scanSound.volume = 0.5;
+  scanSound.play().catch(() => {});
 
-    setScanStep(0);
+  setScanStep(0);
 
-    const t1 = setTimeout(() => setScanStep(1), 1000);
-    const t2 = setTimeout(() => {
-      setScanStep(2);
-      if (pendingUser.code === "51554163") {
-        const welcome = new Audio("/assets/welcome-rodrigo.mp3");
-        welcome.volume = 0.9;
-        welcome.play().catch(() => {
-          console.warn("⚠️ Chrome bloqueó el audio...");
-          const unlock = () => {
-            welcome.play().catch(() => {});
-            document.removeEventListener("click", unlock);
-          };
-          document.addEventListener("click", unlock);
-        });
-      } else {
-        const accessSound = new Audio("/assets/access-granted.mp3");
-        accessSound.volume = 0.6;
-        accessSound.play().catch(() => {});
-      }
-    }, 2000);
+  const t1 = setTimeout(() => setScanStep(1), 1000);
 
-    const t3 = setTimeout(() => {
-      setIsScanning(false);
-      localStorage.setItem("jaha_user", JSON.stringify(pendingUser));
-      onLogin(pendingUser);
-      navigate("/adminrealtime"); // ✅ redirigir al panel de mando
-    }, 8000);
+  const t2 = setTimeout(() => {
+    setScanStep(2);
 
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [isScanning, pendingUser, onLogin, navigate]);
+    if (pendingUser.code === "51554163") {
+      // 🟢 Bienvenida Rodrigo (Minga)
+      const welcome = new Audio("/assets/welcome-rodrigo.mp3");
+      welcome.volume = 0.9;
+      welcome.play().catch(() => {
+        console.warn("⚠️ Chrome bloqueó el audio de Rodrigo...");
+        const unlock = () => {
+          welcome.play().catch(() => {});
+          document.removeEventListener("click", unlock);
+        };
+        document.addEventListener("click", unlock);
+      });
+
+    } else if (pendingUser.code === "888999") {
+      // 🔴 Bienvenida Tiki González (Asunción)
+      const welcomeTiki = new Audio("/assets/tiki-welcome.mp3");
+      welcomeTiki.volume = 0.9;
+      welcomeTiki.play().catch(() => {
+        console.warn("⚠️ Chrome bloqueó el audio de Tiki...");
+        const unlock = () => {
+          welcomeTiki.play().catch(() => {});
+          document.removeEventListener("click", unlock);
+        };
+        document.addEventListener("click", unlock);
+      });
+
+    } else {
+      // Acceso genérico para otros
+      const accessSound = new Audio("/assets/access-granted.mp3");
+      accessSound.volume = 0.6;
+      accessSound.play().catch(() => {});
+    }
+
+  }, 2000);
+
+  const t3 = setTimeout(() => {
+    setIsScanning(false);
+    localStorage.setItem("jaha_user", JSON.stringify(pendingUser));
+    onLogin(pendingUser);
+
+    if (pendingUser.region === "ASUNCION") {
+      navigate("/admincontrolgeneral"); // Panel de Tiki (Asunción)
+    } else if (pendingUser.region === "MINGA") {
+      navigate("/adminrealtime"); // Panel de Rodrigo (Minga Guazú)
+    } else {
+      navigate("/app");
+    }
+  }, 8000);
+
+  return () => {
+    clearTimeout(t1);
+    clearTimeout(t2);
+    clearTimeout(t3);
+  };
+}, [isScanning, pendingUser, onLogin, navigate]);
+
 
   /* === PANTALLA DE CARGA === */
   if (loading) {
@@ -256,111 +285,176 @@ export default function Jaha2045({ onLogin = () => {} }) {
         </button>
       </form>
 
-      {/* === BOTÓN ADMIN === */}
+      {/* BOTÓN ADMIN TIKI — ASUNCIÓN */}
+<button
+  onClick={() => {
+    setShowAdminModal(true);
+    setPendingUser({ region: "ASUNCION" });
+  }}
+  className="fixed bottom-6 right-6 bg-gradient-to-r from-red-700 to-black text-white px-4 py-3 rounded-full shadow-[0_0_25px_rgba(255,0,0,0.6)] hover:scale-110 transition-transform font-semibold text-sm tracking-wide"
+>
+  🛡️ ASUNCIÓN — TIKI
+</button>
+
+{/* BOTÓN ADMIN RODRIGO — MINGA GUAZÚ */}
+<button
+  onClick={() => {
+    setShowAdminModal(true);
+    setPendingUser({ region: "MINGA" });
+  }}
+  className="fixed bottom-6 left-6 bg-gradient-to-r from-red-700 to-black text-white px-4 py-3 rounded-full shadow-[0_0_25px_rgba(255,0,0,0.6)] hover:scale-110 transition-transform font-semibold text-sm tracking-wide"
+>
+  🛡️ MINGA — RODRIGO
+</button>
+
+
+     {/* === MODAL ADMIN CON TECLADO === */}
+{showAdminModal && (
+  <div className="fixed inset-0 bg-black/80 flex items-center justify-center backdrop-blur-sm animate-fadeIn z-50">
+    <div className="bg-gradient-to-b from-black via-neutral-900 to-red-950 border border-red-700/50 rounded-2xl shadow-[0_0_50px_rgba(255,0,0,0.5)] p-6 w-80 sm:w-96 relative">
       <button
-        onClick={() => setShowAdminModal(true)}
-        className="fixed bottom-6 right-6 bg-gradient-to-r from-red-700 to-black text-white px-4 py-3 rounded-full shadow-[0_0_25px_rgba(255,0,0,0.6)] hover:scale-110 transition-transform font-semibold text-sm tracking-wide"
+        onClick={() => setShowAdminModal(false)}
+        className="absolute top-3 right-3 text-red-400 hover:text-red-200"
       >
-        🛡️ ADMIN
+        ✕
       </button>
 
-      {/* === MODAL ADMIN CON TECLADO === */}
-      {showAdminModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center backdrop-blur-sm animate-fadeIn z-50">
-          <div className="bg-gradient-to-b from-black via-neutral-900 to-red-950 border border-red-700/50 rounded-2xl shadow-[0_0_50px_rgba(255,0,0,0.5)] p-6 w-80 sm:w-96 relative">
-            <button
-              onClick={() => setShowAdminModal(false)}
-              className="absolute top-3 right-3 text-red-400 hover:text-red-200"
-            >
-              ✕
-            </button>
-            <div className="flex flex-col items-center gap-4">
-              <img
-                src={rodrigoPhoto}
-                alt="Rodrigo Rios"
-                className="w-24 h-24 rounded-full border-2 border-red-600 shadow-[0_0_15px_rgba(255,0,0,0.7)]"
-              />
-              <h2 className="text-xl font-bold text-red-400">Acceso de Comando</h2>
-              <p className="text-sm text-gray-400 text-center">
-                Ingrese su código de autorización.
-              </p>
+      <div className="flex flex-col items-center gap-4">
 
-              <input
-                value={adminCode}
-                readOnly
-                className="bg-black/90 border border-red-800 rounded-lg text-center text-xl tracking-widest py-3 text-red-400 font-mono w-full mt-2"
-                placeholder="••••••••"
-              />
+        {/* FOTO DINÁMICA SEGÚN REGIÓN */}
+        <img
+          src={pendingUser?.region === "ASUNCION" ? tikiPhoto : rodrigoPhoto}
+          alt={pendingUser?.region === "ASUNCION" ? "Tiki González" : "Rodrigo Ríos"}
+          className="w-24 h-24 rounded-full border-2 border-red-600 shadow-[0_0_15px_rgba(255,0,0,0.7)] object-cover"
+        />
 
-              {adminError && (
-                <p className="text-xs text-red-400 bg-red-950/30 border border-red-700/60 rounded-lg px-3 py-1.5 font-mono w-full text-center">
-                  {adminError}
-                </p>
-              )}
+        <h2 className="text-xl font-bold text-red-400">Acceso de Comando</h2>
 
-              <div className="mt-3 space-y-3 w-full">
-                {KEYPAD_ROWS.map((row, i) => (
-                  <div key={i} className="grid grid-cols-3 gap-3">
-                    {row.map((key) => (
-                      <button
-                        key={key}
-                        onClick={() => handleAdminKey(key)}
-                        className={`py-3 rounded-lg text-lg font-semibold border font-mono ${
-                          key === "OK"
-                            ? "bg-gradient-to-r from-red-600 to-red-400 text-black border-red-500 shadow-[0_0_12px_rgba(248,113,113,0.7)]"
-                            : key === "←"
-                            ? "bg-neutral-950 text-red-400 border-red-700"
-                            : "bg-neutral-950/90 text-red-300 border-red-800/70"
-                        } hover:scale-105 active:scale-95 transition-transform duration-150`}
-                      >
-                        {key}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
+        {/* NOMBRE DEL OPERADOR */}
+        <p className="text-xs text-gray-400 -mt-2 mb-1">
+          {pendingUser?.region === "ASUNCION"
+            ? "Operador: Tiki González — Asunción"
+            : "Operador: Rodrigo Ríos — Minga Guazú"}
+        </p>
+
+        <p className="text-sm text-gray-400 text-center">
+          Ingrese su código de autorización.
+        </p>
+
+        <input
+          value={adminCode}
+          readOnly
+          className="bg-black/90 border border-red-800 rounded-lg text-center text-xl tracking-widest py-3 text-red-400 font-mono w-full mt-2"
+          placeholder="••••••••"
+        />
+
+        {adminError && (
+          <p className="text-xs text-red-400 bg-red-950/30 border border-red-700/60 rounded-lg px-3 py-1.5 font-mono w-full text-center">
+            {adminError}
+          </p>
+        )}
+
+        <div className="mt-3 space-y-3 w-full">
+          {KEYPAD_ROWS.map((row, i) => (
+            <div key={i} className="grid grid-cols-3 gap-3">
+              {row.map((key) => (
+                <button
+                  key={key}
+                  onClick={() => handleAdminKey(key)}
+                  className={`py-3 rounded-lg text-lg font-semibold border font-mono ${
+                    key === "OK"
+                      ? "bg-gradient-to-r from-red-600 to-red-400 text-black border-red-500 shadow-[0_0_12px_rgba(248,113,113,0.7)]"
+                      : key === "←"
+                      ? "bg-neutral-950 text-red-400 border-red-700"
+                      : "bg-neutral-950/90 text-red-300 border-red-800/70"
+                  } hover:scale-105 active:scale-95 transition-transform duration-150`}
+                >
+                  {key}
+                </button>
+              ))}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* === ESCANEO BIOMÉTRICO FUTURISTA === */}
-{isScanning && pendingUser && (
-  <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-black via-neutral-950 to-black z-50 overflow-hidden">
-    {/* 🔴 Radar circular girando */}
-    <div className="absolute w-[500px] h-[500px] rounded-full border border-red-700/30 animate-spin-slow blur-sm shadow-[0_0_60px_rgba(255,0,0,0.2)]"></div>
-    <div className="absolute w-[700px] h-[700px] rounded-full border border-red-800/10 animate-pulse-slow blur-[3px]"></div>
-
-    <div className="mt-6 w-80 bg-black/90 border border-red-600/60 rounded-xl p-4 shadow-[0_0_25px_rgba(255,0,0,0.55)] relative overflow-hidden animate-fadeIn">
-      {/* 🔦 Línea láser que sube y baja */}
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent animate-laserLoop" />
-
-      <div className="relative flex flex-col items-center gap-5">
-        <div className="relative w-36 h-36 rounded-full border-2 border-red-600 shadow-[0_0_20px_rgba(255,0,0,0.8)] overflow-hidden">
-          <img
-            src={rodrigoPhoto}
-            alt="Rodrigo Rios"
-            className="w-full h-full object-cover grayscale brightness-110"
-          />
-          {/* ✨ Brillo dinámico */}
-          <div className="absolute inset-0 bg-gradient-to-b from-red-700/60 via-red-800/40 to-transparent mix-blend-overlay animate-scanGlow" />
-          {/* 🌊 Pulso energético */}
-          <div className="absolute inset-0 border-4 border-red-500/30 rounded-full animate-energyPulse"></div>
+          ))}
         </div>
 
-        <div className="text-center font-mono text-sm">
-          <p className="text-red-400 drop-shadow-[0_0_6px_rgba(255,50,50,0.7)]">
-            {scanStep === 0 && "Inicializando escaneo biométrico..."}
-            {scanStep === 1 && "Analizando parámetros neuronales..."}
-            {scanStep === 2 && "✅ Acceso concedido: Rodrigo Ríos"}
-          </p>
-          <p className="text-[11px] text-gray-400 mt-1">
-            Nivel de acceso: COMANDO CENTRAL · JAHA 2041
-          </p>
-        </div>
       </div>
     </div>
   </div>
+)}
+
+
+      {/* === ESCANEO BIOMÉTRICO FUTURISTA === */}
+{isScanning && pendingUser && (
+  pendingUser.region === "ASUNCION" ? (
+    /* === ESCANEO TIKI — ASUNCIÓN (ROJO) === */
+    <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-black via-neutral-950 to-black z-50 overflow-hidden">
+      {/* 🔴 Radar circular rojo */}
+      <div className="absolute w-[500px] h-[500px] rounded-full border border-red-700/30 animate-spin-slow blur-sm shadow-[0_0_60px_rgba(255,0,0,0.2)]"></div>
+      <div className="absolute w-[700px] h-[700px] rounded-full border border-red-800/10 animate-pulse-slow blur-[3px]"></div>
+
+      <div className="mt-6 w-80 bg-black/90 border border-red-600/60 rounded-xl p-4 shadow-[0_0_25px_rgba(255,0,0,0.55)] relative overflow-hidden animate-fadeIn">
+        {/* 🔦 Línea láser roja */}
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent animate-laserLoop" />
+
+        <div className="relative flex flex-col items-center gap-5">
+          <div className="relative w-36 h-36 rounded-full border-2 border-red-600 shadow-[0_0_20px_rgba(255,0,0,0.8)] overflow-hidden">
+            <img
+              src={tikiPhoto}
+              alt="Tiki González"
+              className="w-full h-full object-cover grayscale brightness-110"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-red-700/60 via-red-800/40 to-transparent mix-blend-overlay animate-scanGlow" />
+            <div className="absolute inset-0 border-4 border-red-500/30 rounded-full animate-energyPulse"></div>
+          </div>
+
+          <div className="text-center font-mono text-sm">
+            <p className="text-red-400 drop-shadow-[0_0_6px_rgba(255,50,50,0.7)]">
+              {scanStep === 0 && "Inicializando escaneo de control político..."}
+              {scanStep === 1 && "Analizando estructura administrativa..."}
+              {scanStep === 2 && "🔴 Acceso concedido: Tiki González"}
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Nivel de acceso: NÚCLEO DE ADMINISTRACIÓN · ASUNCIÓN
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : pendingUser.region === "MINGA" ? (
+    /* === ESCANEO RODRIGO — MINGA GUAZÚ (VERDE) === */
+    <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-black via-neutral-900 to-black z-50 overflow-hidden">
+      {/* 🟢 Radar circular verde */}
+      <div className="absolute w-[500px] h-[500px] rounded-full border border-green-600/30 animate-spin-slow blur-sm shadow-[0_0_60px_rgba(0,255,120,0.2)]"></div>
+      <div className="absolute w-[700px] h-[700px] rounded-full border border-green-800/10 animate-pulse-slow blur-[3px]"></div>
+
+      <div className="mt-6 w-80 bg-black/90 border border-green-500/60 rounded-xl p-4 shadow-[0_0_25px_rgba(0,255,120,0.45)] relative overflow-hidden animate-fadeIn">
+        {/* 🔦 Línea láser verde */}
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-green-400 to-transparent animate-laserLoop" />
+
+        <div className="relative flex flex-col items-center gap-5">
+          <div className="relative w-36 h-36 rounded-full border-2 border-green-400 shadow-[0_0_20px_rgba(0,255,120,0.8)] overflow-hidden">
+            <img
+              src={rodrigoPhoto}
+              alt="Rodrigo Ríos"
+              className="w-full h-full object-cover grayscale brightness-110"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-green-700/50 via-green-800/30 to-transparent mix-blend-overlay animate-scanGlow" />
+            <div className="absolute inset-0 border-4 border-green-500/30 rounded-full animate-energyPulse"></div>
+          </div>
+
+          <div className="text-center font-mono text-sm">
+            <p className="text-green-400 drop-shadow-[0_0_6px_rgba(0,255,120,0.7)]">
+              {scanStep === 0 && "Conectando red territorial..."}
+              {scanStep === 1 && "Verificando legitimidad zonal..."}
+              {scanStep === 2 && "🟢 Acceso concedido: Rodrigo Ríos"}
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Nivel de acceso: COMANDO REGIONAL · MINGA GUAZÚ
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null
 )}
 
 <p className="text-[11px] text-gray-500 mt-6 text-center relative z-10">
