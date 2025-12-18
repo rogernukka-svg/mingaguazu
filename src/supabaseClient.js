@@ -1,12 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
+// ⚠️ Usamos variables de entorno de Vite
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// ✅ Crear una única instancia del cliente
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// ✅ Agregar compatibilidad con getSupabase()
-export function getSupabase() {
-  return supabase;
-}
+export const supabase = createClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
+  }
+);

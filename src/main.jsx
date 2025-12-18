@@ -5,15 +5,6 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Jaha2045 from "./Jaha2045.jsx";
 import App from "./App.jsx";
 
-// 🛰️ Panel administrador Minga (Rodrigo)
-import AdminRealtime from "./admin/AdminRealtime.jsx";
-
-// 🟥 Panel administrador Asunción (Tiki)
-import AdminControlGeneral from "./admin/AdminControlGeneral.jsx";
-
-// 🚗 Panel del conductor (nuevo)
-import ConductorPanel from "./conductor/ConductorPanel.jsx";
-
 import "./index.css";
 
 function Main() {
@@ -47,23 +38,14 @@ function Main() {
         {/* 🧠 Acceso principal */}
         <Route path="/" element={<Jaha2045 onLogin={setUser} />} />
 
-        {/* 📌 Ruta fall-back para /login (evita pantalla en blanco) */}
+        {/* 📌 Fallback login */}
         <Route path="/login" element={<Jaha2045 onLogin={setUser} />} />
 
-        {/* 🧩 Plataforma de coordinadores / ciudadanos */}
+        {/* 🧩 App principal */}
         <Route
           path="/app"
           element={<App initialUser={user} onLogout={() => setUser(null)} />}
         />
-
-        {/* 🟢 Panel de comando regional (Rodrigo - Minga Guazú) */}
-        <Route path="/adminrealtime" element={<AdminRealtime />} />
-
-        {/* 🔴 Panel de control general (Tiki - Asunción) */}
-        <Route path="/admincontrolgeneral" element={<AdminControlGeneral />} />
-
-        {/* 🚗 Panel del conductor */}
-        <Route path="/conductor" element={<ConductorPanel />} />
 
       </Routes>
     </Router>
@@ -76,16 +58,3 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <Main />
   </React.StrictMode>
 );
-
-/*
-// 📴 Service Worker desactivado temporalmente
-// Si querés reactivarlo más adelante, descomentá este bloque.
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/sw.js")
-      .then(() => console.log("✅ Service Worker registrado"))
-      .catch((err) => console.log("SW falló", err));
-  });
-}
-*/
