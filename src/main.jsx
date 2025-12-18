@@ -5,6 +5,9 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Jaha2045 from "./Jaha2045.jsx";
 import App from "./App.jsx";
 
+// 🔑 CSS GLOBAL DE LEAFLET (arregla la flecha del popup en producción)
+import "leaflet/dist/leaflet.css";
+
 import "./index.css";
 
 function Main() {
@@ -34,7 +37,6 @@ function Main() {
   return (
     <Router>
       <Routes>
-
         {/* 🧠 Acceso principal */}
         <Route path="/" element={<Jaha2045 onLogin={setUser} />} />
 
@@ -46,7 +48,6 @@ function Main() {
           path="/app"
           element={<App initialUser={user} onLogout={() => setUser(null)} />}
         />
-
       </Routes>
     </Router>
   );
