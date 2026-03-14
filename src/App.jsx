@@ -11,94 +11,94 @@ import "leaflet/dist/leaflet.css";
 import logoJaha from "./assets/logojahabicolor.png";
 
 /* =====================================================
-   CENTRO URBANO – MINGA GUAZÚ
-   ===================================================== */
-const MINGA_GUAZU_CENTER = [-25.5160, -54.6450];
+   CENTRO REAL – MINGA GUAZÚ
+===================================================== */
+const MINGA_GUAZU_CENTER = [-25.4968706, -54.8418689];
 
 /* =====================================================
-   PROYECTOS – NO SE TOCAN (MAPA)
-   ===================================================== */
+   PROYECTOS – ACTUALIZADOS EN MINGA GUAZÚ
+===================================================== */
 const PROJECTS = [
   {
     id: 1,
     name: "Transparencia - rendición de cuentas en tiempo real",
-    area: "DIRECCIÓN DE FINANZAS",
+    area: "Dirección de Finanzas",
     progress: 85,
-    lat: -25.5172,
-    lng: -54.6468,
-    radius: 700,
+    lat: -25.4978,
+    lng: -54.8442,
+    radius: 1400,
     description:
       "Sistema de seguimiento financiero con datos públicos y control ciudadano en tiempo real.",
   },
   {
     id: 2,
     name: "Guardería Municipal - Presentación",
-    area: "DIRECCIÓN DE OBRAS",
+    area: "Dirección de Obras",
     progress: 55,
-    lat: -25.5149,
-    lng: -54.6429,
-    radius: 900,
+    lat: -25.4939,
+    lng: -54.8386,
+    radius: 1800,
     description:
       "Proyecto de infraestructura social enfocado en atención infantil y fortalecimiento comunitario.",
   },
   {
     id: 3,
     name: "Iluminaciones de espacio público",
-    area: "SEGURIDAD",
+    area: "Seguridad",
     progress: 25,
-    lat: -25.5186,
-    lng: -54.6479,
-    radius: 650,
+    lat: -25.5008,
+    lng: -54.8483,
+    radius: 1300,
     description:
       "Mejora del alumbrado urbano para seguridad, movilidad y recuperación de espacios públicos.",
   },
 ];
 
 /* =====================================================
-   PUNTOS ESTRATÉGICOS – MAPA (NO TOCAR)
-   ===================================================== */
+   PUNTOS ESTRATÉGICOS – ACTUALIZADOS EN MINGA GUAZÚ
+===================================================== */
 const MAP_POINTS = [
   {
     id: "seg",
     type: "Seguridad",
     name: "Base Operativa de Seguridad Urbana",
-    lat: -25.5158,
-    lng: -54.6495,
-    radius: 1000,
+    lat: -25.4952,
+    lng: -54.8424,
+    radius: 1600,
     color: "#2563eb",
   },
   {
     id: "traf",
     type: "Tránsito",
     name: "Nodo de Tránsito Inteligente",
-    lat: -25.5166,
-    lng: -54.6438,
-    radius: 800,
+    lat: -25.4917,
+    lng: -54.8401,
+    radius: 1400,
     color: "#f59e0b",
   },
   {
     id: "sal",
     type: "Salud",
     name: "Unidad de Atención Barrial",
-    lat: -25.5191,
-    lng: -54.6462,
-    radius: 750,
+    lat: -25.4989,
+    lng: -54.8397,
+    radius: 1350,
     color: "#16a34a",
   },
   {
     id: "edu",
     type: "Educación",
     name: "Complejo Educativo Público",
-    lat: -25.5144,
-    lng: -54.6441,
-    radius: 850,
+    lat: -25.4947,
+    lng: -54.8468,
+    radius: 1450,
     color: "#9333ea",
   },
 ];
 
 /* =====================================================
    SEMÁFORO
-   ===================================================== */
+===================================================== */
 function getSemaphore(progress) {
   if (progress >= 80) return "green";
   if (progress >= 40) return "yellow";
@@ -114,7 +114,7 @@ function getProgressColor(progress) {
 function getProgressLabel(progress) {
   if (progress >= 80) return "Avance sólido";
   if (progress >= 40) return "En desarrollo";
-  return "En riesgo";
+  return "Requiere atención";
 }
 
 function createProjectIcon(progress) {
@@ -197,10 +197,12 @@ function StatCard({ title, value, subtitle, color = "red" }) {
 export default function App() {
   const [view, setView] = useState("mapa");
   const [activeProject, setActiveProject] = useState(null);
+
   const handleLogout = () => {
-  localStorage.removeItem("jaha_user");
-  window.location.href = "/";
-};
+    localStorage.removeItem("jaha_user");
+    window.location.href = "/";
+  };
+
   const totalProjects = PROJECTS.length;
   const completedProjects = PROJECTS.filter((p) => p.progress >= 80).length;
   const avgProgress = Math.round(
@@ -214,75 +216,74 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col relative overflow-hidden">
-      {/* Fondo tecnológico */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,40,40,0.16),transparent_22%),radial-gradient(circle_at_bottom,rgba(255,40,40,0.10),transparent_18%),linear-gradient(to_bottom,#050505,#0b0000,#000000)] pointer-events-none" />
       <div className="absolute inset-0 opacity-[0.04] pointer-events-none bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:32px_32px]" />
 
       {/* ================= HEADER ================= */}
       <header className="relative z-[1001] border-b border-red-900/40 bg-black/50 backdrop-blur-md">
-  <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-    <div className="flex items-center gap-4">
-      <div className="rounded-2xl border border-red-500/20 bg-white/[0.04] p-2 shadow-[0_0_20px_rgba(255,0,0,0.12)]">
-        <img
-          src={logoJaha}
-          alt="JAHA 2041"
-          className="w-14 h-14 object-contain"
-        />
-      </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="rounded-2xl border border-red-500/20 bg-white/[0.04] p-2 shadow-[0_0_20px_rgba(255,0,0,0.12)]">
+              <img
+                src={logoJaha}
+                alt="JAHA 2041"
+                className="w-14 h-14 object-contain"
+              />
+            </div>
 
-      <div>
-        <h1 className="text-xl sm:text-2xl font-extrabold tracking-[0.18em] text-white">
-          JAHA <span className="text-red-400">2041</span>
-        </h1>
-        <p className="text-xs sm:text-sm text-white/55 uppercase tracking-[0.18em]">
-          Plataforma urbana inteligente · Minga Guazú
-        </p>
-      </div>
-    </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-extrabold tracking-[0.18em] text-white">
+                JAHA <span className="text-red-400">2041</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-white/55 uppercase tracking-[0.18em]">
+                Plataforma urbana inteligente · Minga Guazú
+              </p>
+            </div>
+          </div>
 
-    <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-      <nav className="flex flex-wrap gap-2">
-        <HeaderButton
-          active={view === "mapa"}
-          onClick={() => setView("mapa")}
-        >
-          Mapa
-        </HeaderButton>
-        <HeaderButton
-          active={view === "proyectos"}
-          onClick={() => setView("proyectos")}
-        >
-          Proyectos
-        </HeaderButton>
-        <HeaderButton
-          active={view === "participar"}
-          onClick={() => setView("participar")}
-        >
-          Participar
-        </HeaderButton>
-        <HeaderButton
-          active={view === "seguimiento"}
-          onClick={() => setView("seguimiento")}
-        >
-          Seguimiento
-        </HeaderButton>
-        <HeaderButton
-          active={view === "perfil"}
-          onClick={() => setView("perfil")}
-        >
-          Perfil
-        </HeaderButton>
-      </nav>
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            <nav className="flex flex-wrap gap-2">
+              <HeaderButton
+                active={view === "mapa"}
+                onClick={() => setView("mapa")}
+              >
+                Mapa
+              </HeaderButton>
+              <HeaderButton
+                active={view === "proyectos"}
+                onClick={() => setView("proyectos")}
+              >
+                Proyectos
+              </HeaderButton>
+              <HeaderButton
+                active={view === "participar"}
+                onClick={() => setView("participar")}
+              >
+                Participar
+              </HeaderButton>
+              <HeaderButton
+                active={view === "seguimiento"}
+                onClick={() => setView("seguimiento")}
+              >
+                Seguimiento
+              </HeaderButton>
+              <HeaderButton
+                active={view === "perfil"}
+                onClick={() => setView("perfil")}
+              >
+                Perfil
+              </HeaderButton>
+            </nav>
 
-      <button
-        onClick={handleLogout}
-        className="px-4 py-2 rounded-full text-sm font-bold bg-white/5 text-white border border-red-500/30 hover:bg-red-600 hover:border-red-500 transition"
-      >
-        Cerrar sesión
-      </button>
-    </div>
-  </div>
-</header>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 rounded-full text-sm font-bold bg-white/5 text-white border border-red-500/30 hover:bg-red-600 hover:border-red-500 transition"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+      </header>
 
       {/* ================= DASH TOP ================= */}
       <section className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 pt-5 pb-3">
@@ -319,7 +320,7 @@ export default function App() {
                     Centro Urbano Inteligente
                   </h2>
                   <p className="text-sm text-white/55">
-                    Visualización geográfica de proyectos y nodos estratégicos
+                    Visualización geográfica de proyectos y puntos estratégicos
                   </p>
                 </div>
 
@@ -327,25 +328,25 @@ export default function App() {
                   onClick={() => setView("proyectos")}
                   className="hidden sm:inline-flex bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-full font-bold shadow-[0_0_20px_rgba(255,0,0,0.35)] transition"
                 >
-                  Explorar proyectos
+                  Ver proyectos
                 </button>
               </div>
 
               <div className="h-[72vh] min-h-[520px] relative">
                 <MapContainer
                   center={MINGA_GUAZU_CENTER}
-                  zoom={15}
+                  zoom={13}
                   maxBounds={[
-                    [-25.55, -54.67],
-                    [-25.48, -54.62],
+                    [-25.56, -54.93],
+                    [-25.44, -54.76],
                   ]}
                   maxBoundsViscosity={1.0}
                   className="h-full w-full z-0"
                 >
-                 <TileLayer
-  attribution="&copy; OpenStreetMap & Carto"
-  url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-/>
+                  <TileLayer
+                    attribution="&copy; OpenStreetMap & Carto"
+                    url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                  />
 
                   {PROJECTS.map((p) => {
                     const s = getSemaphore(p.progress);
@@ -464,11 +465,11 @@ export default function App() {
                 <div className="mt-6 space-y-4">
                   <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-red-300/70">
-                      Estado del mapa
+                      Cómo usar
                     </p>
-                    <p className="mt-2 text-white/80 text-sm">
-                      Tocá un proyecto en el mapa para ver su radio de impacto y
-                      sus detalles.
+                    <p className="mt-2 text-white/80 text-sm leading-relaxed">
+                      Tocá un punto del mapa para ver el proyecto. Si querés más
+                      detalle, entrá a la sección <b>Proyectos</b>.
                     </p>
                   </div>
 
@@ -501,12 +502,11 @@ export default function App() {
 
                   <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                     <p className="text-sm font-bold text-white">
-                      Enfoque tecnológico
+                      Lectura rápida
                     </p>
-                    <p className="mt-2 text-sm text-white/65">
-                      Visualización territorial, lectura rápida por semáforo y
-                      estructura pensada para ciudadanía, gabinete y seguimiento
-                      institucional.
+                    <p className="mt-2 text-sm text-white/65 leading-relaxed">
+                      Este panel fue pensado para que cualquier persona pueda
+                      entender el estado de los proyectos sin complicaciones.
                     </p>
                   </div>
                 </div>
@@ -521,7 +521,7 @@ export default function App() {
                       {selectedProject.name}
                     </h4>
 
-                    <p className="mt-2 text-sm text-white/65">
+                    <p className="mt-2 text-sm text-white/65 leading-relaxed">
                       {selectedProject.description}
                     </p>
 
@@ -632,7 +632,7 @@ export default function App() {
                       />
                     </div>
 
-                    <p className="mt-4 text-sm text-white/65">
+                    <p className="mt-4 text-sm text-white/65 leading-relaxed">
                       {p.description}
                     </p>
 
@@ -698,23 +698,23 @@ export default function App() {
               {[
                 {
                   emoji: "📊",
-                  title: "Encuestas geolocalizadas",
-                  text: "Relevamiento por barrio con enfoque territorial y lectura rápida de necesidades.",
+                  title: "Encuestas por barrio",
+                  text: "Relevamiento simple para conocer necesidades y prioridades de cada zona.",
                 },
                 {
                   emoji: "🚧",
                   title: "Reportes urbanos",
-                  text: "Carga de necesidades, incidencias y observaciones sobre obras o servicios.",
+                  text: "Carga de problemas o necesidades sobre obras, servicios y espacios públicos.",
                 },
                 {
                   emoji: "💡",
-                  title: "Información actualizada",
-                  text: "Seguimiento ciudadano de avances con una experiencia clara y accesible.",
+                  title: "Información clara",
+                  text: "Seguimiento de avances con una experiencia fácil de entender.",
                 },
                 {
                   emoji: "🗳️",
                   title: "Proyectos participativos",
-                  text: "Espacios para acompañar decisiones, propuestas y prioridades comunitarias.",
+                  text: "Espacio para acompañar decisiones y propuestas comunitarias.",
                 },
               ].map((item) => (
                 <div
@@ -725,7 +725,9 @@ export default function App() {
                   <h3 className="mt-4 text-lg font-extrabold text-white">
                     {item.title}
                   </h3>
-                  <p className="mt-2 text-sm text-white/65">{item.text}</p>
+                  <p className="mt-2 text-sm text-white/65 leading-relaxed">
+                    {item.text}
+                  </p>
                 </div>
               ))}
             </div>
@@ -764,17 +766,14 @@ export default function App() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <p className="text-sm text-white/65">
+              <p className="text-sm text-white/65 leading-relaxed">
                 Sistema de semáforo ciudadano:
                 <span className="text-green-400 font-semibold"> verde</span>{" "}
-                avanza,
-                <span className="text-yellow-300 font-semibold">
-                  {" "}
-                  amarillo
-                </span>{" "}
-                en riesgo,
+                significa que avanza bien,
+                <span className="text-yellow-300 font-semibold"> amarillo</span>{" "}
+                indica atención,
                 <span className="text-red-400 font-semibold"> rojo</span>{" "}
-                detenido o crítico.
+                señala prioridad o retraso.
               </p>
             </div>
           </div>
@@ -807,10 +806,10 @@ export default function App() {
                 Sobre la plataforma
               </h3>
 
-              <p className="mt-3 text-white/65">
-                JAHA 2041 es una plataforma oficial orientada al seguimiento del
-                Plan de Desarrollo Sostenible de Minga Guazú, con foco en
-                transparencia, participación y lectura territorial.
+              <p className="mt-3 text-white/65 leading-relaxed">
+                JAHA 2041 es una plataforma orientada al seguimiento del Plan de
+                Desarrollo Sostenible de Minga Guazú, con foco en transparencia,
+                participación y lectura territorial.
               </p>
 
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -818,7 +817,7 @@ export default function App() {
                   "Acceso a información pública",
                   "Monitoreo de proyectos y obras",
                   "Participación activa ciudadana",
-                  "Modo invitado sin registro obligatorio",
+                  "Modo simple y fácil de usar",
                 ].map((item) => (
                   <div
                     key={item}

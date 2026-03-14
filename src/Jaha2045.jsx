@@ -109,11 +109,11 @@ export default function Jaha2045({ onLogin = () => {} }) {
 
         <div className="absolute w-[420px] h-[420px] rounded-full bg-red-600/10 blur-3xl top-10" />
 
-        <img
-          src={mapaBase}
-          alt="Mapa base"
-          className="absolute w-[340px] sm:w-[430px] opacity-10 object-contain select-none pointer-events-none"
-        />
+       <img
+  src={mapaBase}
+  alt="Mapa base"
+  className="absolute w-[420px] sm:w-[560px] h-auto opacity-10 object-cover object-[50%_42%] select-none pointer-events-none"
+/>
 
         <img
           src={logoJaha}
@@ -151,12 +151,11 @@ export default function Jaha2045({ onLogin = () => {} }) {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,40,40,0.18),transparent_30%),linear-gradient(to_bottom,#050505,#110000,#000000)]" />
       <div className="absolute top-16 left-1/2 -translate-x-1/2 w-[420px] h-[420px] bg-red-500/10 blur-3xl rounded-full" />
       <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[520px] h-[220px] bg-red-600/10 blur-3xl rounded-full" />
-
-      <img
-        src={mapaBase}
-        alt="Mapa base"
-        className="absolute w-[360px] sm:w-[480px] opacity-[0.06] object-contain select-none pointer-events-none"
-      />
+<img
+  src={mapaBase}
+  alt="Mapa base"
+  className="absolute w-[460px] sm:w-[620px] h-auto opacity-[0.07] object-cover object-[50%_42%] select-none pointer-events-none"
+/>
 
       {/* logo arriba */}
       <div className="relative z-10 mb-6 flex flex-col items-center">
