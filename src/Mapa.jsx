@@ -40,9 +40,11 @@ export default function Mapa() {
 
         {proyectos.map((p) => (
           <Marker key={p.id} position={[p.lat, p.lng]}>
-            <Popup>
-              <b>{p.name}</b> <br />
-              <Semaforo status={p.estado} /> <br />
+            <Popup className="jaha-popup">
+              <b>{p.name}</b>
+              <br />
+              <Semaforo status={p.estado} />
+              <br />
               Avance: {p.avance}%
             </Popup>
           </Marker>

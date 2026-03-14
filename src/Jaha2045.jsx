@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import mapaBase from "./assets/mapa1.png";
-import rodrigoPhoto from "./assets/rodrigo.png";
+import logoJaha from "./assets/logojahabicolor.png";
 
 export default function Jaha2045({ onLogin = () => {} }) {
   const navigate = useNavigate();
@@ -10,93 +10,89 @@ export default function Jaha2045({ onLogin = () => {} }) {
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState(0);
   const [year, setYear] = useState(2025);
-
-  const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminCode, setAdminCode] = useState("");
-  const [adminError, setAdminError] = useState("");
-  const [isScanning, setIsScanning] = useState(false);
-  const [pendingUser, setPendingUser] = useState(null);
-  const [showAdminCode, setShowAdminCode] = useState(false);
-
-
   const [radarAudio] = useState(new Audio("/assets/radar.mp3"));
 
   const [formUser, setFormUser] = useState({
-    name: "",
-    username: "",
-    code: "",
+    nombre: "",
+    apellido: "",
+    cedula: "",
+    telefono: "",
+    codigo: "",
   });
 
-  /* ===================== ACCESO ADMIN ===================== */
-  const ACCESS_LIST = [
-    {
-      code: "51554163",
-      name: "Rodri de Minga",
-      role: "admin",
-      region: "MINGA",
-    },
-  ];
+  /* ===================== ANIMACIÓN INICIAL ===================== */
+  useEffect(() => {
+    const audio = radarAudio;
+    audio.loop = true;
+    audio.volume = 0.6;
 
-  const KEYPAD_ROWS = [
-    ["1", "2", "3"],
-    ["4", "5", "6"],
-    ["7", "8", "9"],
-    ["←", "0", "OK"],
-  ];
+    let pct = 0;
+    let currentYear = 2025;
 
- /* ===================== ANIMACIÓN INICIAL ===================== */
-useEffect(() => {
-  const audio = radarAudio;
-  audio.loop = true;
-  audio.volume = 0.6;
+    const interval = setInterval(() => {
+      pct += 1;
 
-  let pct = 0;
-  let currentYear = 2025;
+      if (pct % 3 === 0 && currentYear < 2041) currentYear++;
 
-  const interval = setInterval(() => {
-    pct += 1;
+      setProgress(pct);
+      setYear(currentYear);
 
-    // ⏩ Año avanza más rápido (antes era % 6)
-    if (pct % 3 === 0 && currentYear < 2041) currentYear++;
+      if (currentYear === 2041 && pct >= 100) {
+        clearInterval(interval);
+        setTimeout(() => {
+          audio.pause();
+          setLoading(false);
+        }, 1200);
+      }
+    }, 70);
 
-    setProgress(pct);
-    setYear(currentYear);
+    audio.play().catch(() => {
+      const unlock = () => {
+        audio.play().catch(() => {});
+        document.removeEventListener("click", unlock);
+      };
+      document.addEventListener("click", unlock);
+    });
 
-    if (currentYear === 2041 && pct >= 100) {
+    return () => {
       clearInterval(interval);
-      setTimeout(() => {
-        audio.pause();
-        setLoading(false);
-      }, 1200);
-    }
-  }, 70);
-
-  audio.play().catch(() => {
-    const unlock = () => {
-      audio.play().catch(() => {});
-      document.removeEventListener("click", unlock);
+      audio.pause();
     };
-    document.addEventListener("click", unlock);
-  });
+  }, [radarAudio]);
 
-  return () => {
-    clearInterval(interval);
-    audio.pause();
+  /* ===================== HELPERS ===================== */
+  const handleChange = (field, value) => {
+    if (field === "cedula" || field === "telefono" || field === "codigo") {
+      value = value.replace(/\D/g, "");
+    }
+
+    setFormUser((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   };
-}, [radarAudio]);
-
 
   /* ===================== LOGIN NORMAL ===================== */
   const handleNormalLogin = (e) => {
     e.preventDefault();
-    if (!formUser.name || !formUser.username || !formUser.code) {
+
+    if (
+      !formUser.nombre.trim() ||
+      !formUser.apellido.trim() ||
+      !formUser.cedula.trim() ||
+      !formUser.telefono.trim() ||
+      !formUser.codigo.trim()
+    ) {
       alert("Completá todos los campos");
       return;
     }
 
     const userData = {
-      name: formUser.name,
-      username: formUser.username,
+      nombre: formUser.nombre.trim(),
+      apellido: formUser.apellido.trim(),
+      cedula: formUser.cedula.trim(),
+      telefono: formUser.telefono.trim(),
+      username: formUser.cedula.trim(),
       role: "normal",
     };
 
@@ -105,80 +101,43 @@ useEffect(() => {
     navigate("/app");
   };
 
-  /* ===================== ADMIN ===================== */
-  const handleAdminKey = (key) => {
-    if (isScanning) return;
-    if (key === "←") return setAdminCode((p) => p.slice(0, -1));
-    if (key === "OK") return validateAdmin();
-    if (/^\d$/.test(key))
-      setAdminCode((p) => (p.length >= 8 ? p : p + key));
-  };
-
-  const validateAdmin = () => {
-    const found = ACCESS_LIST.find((u) => u.code === adminCode.trim());
-    if (!found) {
-      setAdminError("Código inválido");
-      return;
-    }
-    setAdminError("");
-    setPendingUser(found);
-    setIsScanning(true);
-    setShowAdminModal(false);
-  };
-
-  /* ====== VOLVER ATRÁS (ADMIN) ====== */
-  const handleAdminBack = () => {
-    setShowAdminModal(false);
-    setAdminCode("");
-    setAdminError("");
-    setPendingUser(null);
-    setIsScanning(false);
-  };
-
-  useEffect(() => {
-    if (!isScanning || !pendingUser) return;
-
-    const t = setTimeout(() => {
-      setIsScanning(false);
-      localStorage.setItem("jaha_user", JSON.stringify(pendingUser));
-      onLogin(pendingUser);
-      navigate("/app");
-    }, 5200);
-
-    return () => clearTimeout(t);
-  }, [isScanning, pendingUser, onLogin, navigate]);
-
   /* ===================== PANTALLA DE CARGA ===================== */
   if (loading) {
     return (
-      <div className="relative min-h-screen bg-black flex flex-col items-center justify-center overflow-hidden text-red-500">
-        <div className="absolute inset-0 bg-gradient-to-b from-black via-[#140000] to-black" />
+      <div className="relative min-h-screen overflow-hidden bg-black flex flex-col items-center justify-center px-6">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,50,50,0.18),transparent_35%),linear-gradient(to_bottom,#0a0a0a,#120000,#000000)]" />
+
+        <div className="absolute w-[420px] h-[420px] rounded-full bg-red-600/10 blur-3xl top-10" />
+
         <img
           src={mapaBase}
           alt="Mapa base"
-          className="w-[360px] sm:w-[460px] opacity-80 drop-shadow-[0_0_60px_rgba(255,0,0,0.8)]"
+          className="absolute w-[340px] sm:w-[430px] opacity-10 object-contain select-none pointer-events-none"
         />
 
-        <div className="mt-6 text-center z-10">
-          <h1 className="text-6xl font-extrabold tracking-[0.3em] text-white">
-            JAHA
-          </h1>
-          <p className="text-5xl font-mono font-bold text-red-500 mt-2">
+        <img
+          src={logoJaha}
+          alt="Logo JAHA"
+          className="relative z-10 w-[220px] sm:w-[280px] drop-shadow-[0_0_25px_rgba(255,40,40,0.45)] select-none"
+        />
+
+        <div className="relative z-10 mt-6 text-center">
+          <p className="text-5xl sm:text-6xl font-extrabold tracking-[0.18em] text-white">
             {year}
           </p>
-          <p className="text-xs tracking-widest text-gray-400 mt-2">
+          <p className="mt-2 text-[11px] sm:text-xs uppercase tracking-[0.35em] text-red-300/80">
             Minga Guazú · Ciudad Inteligente
           </p>
         </div>
 
-        <div className="w-64 h-1 bg-neutral-800 rounded-full mt-8 overflow-hidden">
+        <div className="relative z-10 w-64 sm:w-80 h-2 mt-8 bg-white/10 rounded-full overflow-hidden border border-red-500/20">
           <div
-            className="h-full bg-gradient-to-r from-red-800 via-red-500 to-red-800 transition-all"
+            className="h-full rounded-full bg-gradient-to-r from-red-900 via-red-500 to-red-300 transition-all duration-150"
             style={{ width: `${progress}%` }}
           />
         </div>
 
-        <p className="text-xs text-gray-500 mt-2 font-mono">
+        <p className="relative z-10 text-xs text-white/70 mt-3 font-mono tracking-[0.25em]">
           {progress}%
         </p>
       </div>
@@ -187,108 +146,145 @@ useEffect(() => {
 
   /* ===================== LOGIN ===================== */
   return (
-    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-4">
+    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
+      {/* fondo */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,40,40,0.18),transparent_30%),linear-gradient(to_bottom,#050505,#110000,#000000)]" />
+      <div className="absolute top-16 left-1/2 -translate-x-1/2 w-[420px] h-[420px] bg-red-500/10 blur-3xl rounded-full" />
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[520px] h-[220px] bg-red-600/10 blur-3xl rounded-full" />
+
+      <img
+        src={mapaBase}
+        alt="Mapa base"
+        className="absolute w-[360px] sm:w-[480px] opacity-[0.06] object-contain select-none pointer-events-none"
+      />
+
+      {/* logo arriba */}
+      <div className="relative z-10 mb-6 flex flex-col items-center">
+        <div className="relative">
+          <div className="absolute inset-0 blur-2xl bg-red-500/20 rounded-full" />
+          <img
+            src={logoJaha}
+            alt="Logo JAHA"
+            className="relative w-[180px] sm:w-[220px] drop-shadow-[0_0_18px_rgba(255,0,0,0.35)]"
+          />
+        </div>
+
+        <p className="mt-4 text-xs uppercase tracking-[0.35em] text-red-300/80 text-center">
+          Plataforma Ciudadana · Acceso Seguro
+        </p>
+
+        <p className="mt-2 text-[11px] sm:text-xs text-white/50 text-center max-w-sm">
+          Ingresá tus datos para acceder de forma rápida, clara y segura.
+        </p>
+      </div>
+<div className="mt-4 relative z-10">
+  <div className="absolute inset-0 blur-xl bg-red-500/20 rounded-xl"></div>
+
+  <div className="relative px-5 py-2 rounded-xl border border-red-500/30 bg-black/60 backdrop-blur-md">
+    <p className="text-[11px] sm:text-xs uppercase tracking-[0.32em] text-red-400 text-center font-semibold">
+      Programa de Innovación Ciudadana · Rodrigo Ríos 2026
+    </p>
+  </div>
+</div>
       <form
         onSubmit={handleNormalLogin}
-        className="w-full max-w-sm bg-neutral-900 border border-red-700 rounded-2xl p-6 shadow-[0_0_30px_rgba(255,0,0,0.4)]"
+        className="relative z-10 w-full max-w-md rounded-[28px] border border-red-600/30 bg-white/[0.05] backdrop-blur-xl p-5 sm:p-7 shadow-[0_0_40px_rgba(255,0,0,0.12)]"
       >
-        <h2 className="text-center text-red-400 mb-4 tracking-widest">
-          ACCESO CIUDADANO
-        </h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-red-400 tracking-[0.28em] text-sm font-bold uppercase">
+            Acceso Ciudadano
+          </h2>
 
-        <input
-          placeholder="Nombre completo"
-          className="w-full mb-3 p-2 bg-black border border-red-800 text-center"
-          value={formUser.name}
-          onChange={(e) => setFormUser({ ...formUser, name: e.target.value })}
-        />
-
-        <input
-          placeholder="Usuario"
-          className="w-full mb-3 p-2 bg-black border border-red-800 text-center"
-          value={formUser.username}
-          onChange={(e) =>
-            setFormUser({ ...formUser, username: e.target.value })
-          }
-        />
-
-        <input
-          type="password"
-          placeholder="Código"
-          className="w-full mb-4 p-2 bg-black border border-red-800 text-center"
-          value={formUser.code}
-          onChange={(e) => setFormUser({ ...formUser, code: e.target.value })}
-        />
-
-        <button className="w-full bg-gradient-to-r from-red-600 to-red-400 text-black font-bold py-2 rounded-lg">
-          Entrar
-        </button>
-      </form>
-
-      {/* BOTÓN ADMIN */}
-      <button
-        onClick={() => setShowAdminModal(true)}
-        className="fixed bottom-6 left-6 bg-gradient-to-r from-red-700 to-black px-4 py-3 rounded-full shadow-[0_0_25px_rgba(255,0,0,0.6)]"
-      >
-        🛡️ RODRI DE MINGA
-      </button>
-
-      {/* MODAL ADMIN */}
-      {showAdminModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-neutral-900 border border-red-700 rounded-2xl p-6 w-80 relative">
-            {/* VOLVER */}
-            <button
-              onClick={handleAdminBack}
-              className="absolute top-3 left-3 text-sm text-red-400 hover:text-red-200"
-            >
-              ← Volver
-            </button>
-
-            <img
-              src={rodrigoPhoto}
-              className="w-24 h-24 rounded-full mx-auto mb-4 border border-red-600"
-            />
-
-            <div className="relative mb-3">
-  <input
-    readOnly
-    type={showAdminCode ? "text" : "password"}
-    value={adminCode}
-    className="w-full p-2 bg-black border border-red-800 text-center pr-10"
-  />
-
-  <button
-    type="button"
-    onClick={() => setShowAdminCode((v) => !v)}
-    className="absolute right-2 top-1/2 -translate-y-1/2 text-red-400 text-sm"
-  >
-    {showAdminCode ? "🙈" : "👁️"}
-  </button>
-</div>
-
-            {adminError && (
-              <p className="text-red-500 text-sm text-center mb-2">
-                {adminError}
-              </p>
-            )}
-
-            {KEYPAD_ROWS.map((row, i) => (
-              <div key={i} className="grid grid-cols-3 gap-2 mb-2">
-                {row.map((k) => (
-                  <button
-                    key={k}
-                    onClick={() => handleAdminKey(k)}
-                    className="bg-black border border-red-700 py-2"
-                  >
-                    {k}
-                  </button>
-                ))}
-              </div>
-            ))}
+          <div className="px-3 py-1 rounded-full border border-red-500/20 bg-red-500/10 text-[10px] uppercase tracking-[0.2em] text-red-200/80">
+            Secure ID
           </div>
         </div>
-      )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block mb-2 text-[11px] uppercase tracking-[0.22em] text-white/55">
+              Nombre
+            </label>
+            <input
+              type="text"
+              placeholder="Tu nombre"
+              className="w-full p-3 rounded-2xl bg-black/60 border border-red-800/70 text-white placeholder:text-white/30 outline-none focus:border-red-500 focus:shadow-[0_0_12px_rgba(255,0,0,0.18)] transition"
+              value={formUser.nombre}
+              onChange={(e) => handleChange("nombre", e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block mb-2 text-[11px] uppercase tracking-[0.22em] text-white/55">
+              Apellido
+            </label>
+            <input
+              type="text"
+              placeholder="Tu apellido"
+              className="w-full p-3 rounded-2xl bg-black/60 border border-red-800/70 text-white placeholder:text-white/30 outline-none focus:border-red-500 focus:shadow-[0_0_12px_rgba(255,0,0,0.18)] transition"
+              value={formUser.apellido}
+              onChange={(e) => handleChange("apellido", e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <label className="block mb-2 text-[11px] uppercase tracking-[0.22em] text-white/55">
+            Número de cédula
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="Ej: 51554163"
+            className="w-full p-3 rounded-2xl bg-black/60 border border-red-800/70 text-white placeholder:text-white/30 outline-none focus:border-red-500 focus:shadow-[0_0_12px_rgba(255,0,0,0.18)] transition"
+            value={formUser.cedula}
+            onChange={(e) => handleChange("cedula", e.target.value)}
+          />
+        </div>
+
+        <div className="mt-3">
+          <label className="block mb-2 text-[11px] uppercase tracking-[0.22em] text-white/55">
+            Número de teléfono
+          </label>
+          <input
+            type="tel"
+            inputMode="numeric"
+            placeholder="Ej: 0982030926"
+            className="w-full p-3 rounded-2xl bg-black/60 border border-red-800/70 text-white placeholder:text-white/30 outline-none focus:border-red-500 focus:shadow-[0_0_12px_rgba(255,0,0,0.18)] transition"
+            value={formUser.telefono}
+            onChange={(e) => handleChange("telefono", e.target.value)}
+          />
+        </div>
+
+        <div className="mt-3">
+          <label className="block mb-2 text-[11px] uppercase tracking-[0.22em] text-white/55">
+            Código de acceso
+          </label>
+          <input
+            type="password"
+            inputMode="numeric"
+            placeholder="Ingresá tu código"
+            className="w-full p-3 rounded-2xl bg-black/60 border border-red-800/70 text-white placeholder:text-white/30 outline-none focus:border-red-500 focus:shadow-[0_0_12px_rgba(255,0,0,0.18)] transition"
+            value={formUser.codigo}
+            onChange={(e) => handleChange("codigo", e.target.value)}
+          />
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-3">
+          <button
+            type="submit"
+            className="w-full rounded-2xl bg-gradient-to-r from-red-700 via-red-500 to-red-400 text-white font-extrabold py-3.5 tracking-[0.2em] uppercase shadow-[0_0_18px_rgba(255,0,0,0.28)] hover:scale-[1.01] active:scale-[0.99] transition"
+          >
+            Entrar
+          </button>
+        </div>
+
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <p className="text-center text-[11px] text-white/45 tracking-[0.14em] uppercase">
+            Interfaz clara · rápida · tecnológica
+          </p>
+        </div>
+      </form>
     </main>
   );
 }

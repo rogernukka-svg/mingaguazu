@@ -13,17 +13,31 @@ body {
 }
 
 /* =====================================================
-   FIX DEFINITIVO: Flecha Popup Leaflet (Tailwind reset)
+   FIX DEFINITIVO: Flecha Popup Leaflet (Render + Tailwind)
    ===================================================== */
-.leaflet-popup-tip {
-  width: 0;
-  height: 0;
-  border-left: 10px solid transparent !important;
-  border-right: 10px solid transparent !important;
-  border-top: 10px solid white !important;
+
+/* ❌ Desactivamos flecha nativa rota */
+.leaflet-popup-tip,
+.leaflet-popup-tip-container {
+  display: none !important;
 }
 
-.leaflet-popup-tip-container {
-  display: block !important;
-  overflow: visible !important;
+/* ✅ Popup base */
+.jaha-popup .leaflet-popup-content-wrapper {
+  position: relative;
+  background: white;
+  border-radius: 12px;
+}
+
+/* ✅ Flecha estable en CSS puro */
+.jaha-popup .leaflet-popup-content-wrapper::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 10px;
+  background: white;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
 }
