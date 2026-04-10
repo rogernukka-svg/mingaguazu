@@ -231,6 +231,8 @@ function parseRichDescription(description = "") {
 
   let barrio = "";
   let urgent = false;
+  let supports = 0;
+  let photoUrls = [];
   const cleanLines = [];
 
   for (const line of lines) {
@@ -244,24 +246,65 @@ function parseRichDescription(description = "") {
       continue;
     }
 
+    if (line.startsWith("[SUPPORTS]")) {
+      supports = Number(line.replace("[SUPPORTS]", "").trim()) || 0;
+      continue;
+    }
+
+    if (line.startsWith("[PHOTO_URLS]")) {
+      const rawUrls = line.replace("[PHOTO_URLS]", "").trim();
+      photoUrls = rawUrls
+        ? rawUrls.split("|").map((url) => url.trim()).filter(Boolean)
+        : [];
+      continue;
+    }
+
     cleanLines.push(line);
   }
 
   return {
     barrio,
     urgent,
+    supports,
+    photoUrls,
     cleanDescription: cleanLines.join("\n").trim(),
   };
 }
 
-function buildRichDescription({ barrio, urgent, description }) {
+function buildRichDescription({
+  barrio,
+  urgent,
+  description,
+  photoUrls = [],
+  supports = 0,
+}) {
   const parts = [];
 
   if (barrio?.trim()) parts.push(`[BARRIO] ${barrio.trim()}`);
   parts.push(`[URGENTE] ${urgent ? "si" : "no"}`);
+  parts.push(`[SUPPORTS] ${Number(supports) || 0}`);
+  parts.push(`[PHOTO_URLS] ${(photoUrls || []).join("|")}`);
   parts.push((description || "").trim());
 
   return parts.join("\n");
+}
+
+function getDistanceMeters(lat1, lng1, lat2, lng2) {
+  const toRad = (value) => (value * Math.PI) / 180;
+  const R = 6371000;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
 }
 
 /* =====================================================
@@ -401,6 +444,8 @@ export default function App() {
 
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [pickingOnMap, setPickingOnMap] = useState(false);
+  const [reportPhotos, setReportPhotos] = useState([]);
+  const [duplicateReport, setDuplicateReport] = useState(null);
 
   const [reportForm, setReportForm] = useState({
     category: "luz",
@@ -475,15 +520,72 @@ export default function App() {
     }));
   };
 
+  const handleReportPhotos = (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 4);
+    setReportPhotos(files);
+  };
+
+  const uploadReportPhotos = async () => {
+    if (!reportPhotos.length) return [];
+
+    const uploadedUrls = [];
+
+    for (const file of reportPhotos) {
+      const safeName = `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}-${file.name.replace(/\s+/g, "-")}`;
+
+      const path = `${session.user.id}/${safeName}`;
+
+      const { error } = await supabase.storage
+        .from("citizen-reports")
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage
+        .from("citizen-reports")
+        .getPublicUrl(path);
+
+      if (data?.publicUrl) {
+        uploadedUrls.push(data.publicUrl);
+      }
+    }
+
+    return uploadedUrls;
+  };
+
+  const findDuplicateReport = (nextForm) => {
+    const candidate = reports.find((report) => {
+      const sameCategory = report.category === nextForm.category;
+      const distance = getDistanceMeters(
+        Number(report.lat),
+        Number(report.lng),
+        Number(nextForm.lat),
+        Number(nextForm.lng)
+      );
+
+      return sameCategory && distance <= 180;
+    });
+
+    return candidate || null;
+  };
+
   const openReportModal = ({
     lat = MINGA_GUAZU_CENTER[0],
     lng = MINGA_GUAZU_CENTER[1],
   } = {}) => {
-    setReportForm((prev) => ({
-      ...prev,
+    const nextForm = {
+      ...reportForm,
       lat,
       lng,
-    }));
+    };
+
+    setReportForm(nextForm);
+    setDuplicateReport(findDuplicateReport(nextForm));
     setReportModalOpen(true);
   };
 
@@ -497,6 +599,8 @@ export default function App() {
       lat: MINGA_GUAZU_CENTER[0],
       lng: MINGA_GUAZU_CENTER[1],
     });
+    setReportPhotos([]);
+    setDuplicateReport(null);
   };
 
   const handleCreateReport = async (e) => {
@@ -512,6 +616,8 @@ export default function App() {
     setReportSaving(true);
 
     try {
+      const uploadedPhotoUrls = await uploadReportPhotos();
+
       const payload = {
         user_id: session.user.id,
         full_name:
@@ -525,6 +631,8 @@ export default function App() {
           barrio: reportForm.barrio,
           urgent: reportForm.urgent,
           description: reportForm.description,
+          photoUrls: uploadedPhotoUrls,
+          supports: 0,
         }),
         lat: Number(reportForm.lat),
         lng: Number(reportForm.lng),
@@ -559,11 +667,6 @@ export default function App() {
     PROJECTS.reduce((acc, p) => acc + p.progress, 0) / PROJECTS.length
   );
 
-  const selectedProject = useMemo(
-    () => PROJECTS.find((p) => p.id === activeProject) || null,
-    [activeProject]
-  );
-
   const currentUser = session?.user ?? null;
   const currentUserName =
     currentUser?.user_metadata?.name ||
@@ -579,6 +682,8 @@ export default function App() {
         ...report,
         parsedBarrio: parsed.barrio,
         parsedUrgent: parsed.urgent,
+        parsedSupports: parsed.supports,
+        parsedPhotoUrls: parsed.photoUrls,
         cleanDescription: parsed.cleanDescription,
         statusMeta: getStatusMeta(report.status),
         categoryMeta: getCategoryMeta(report.category),
@@ -587,9 +692,7 @@ export default function App() {
   }, [reports]);
 
   const recentCount = enrichedReports.filter((r) => r.status === "pendiente").length;
-  const processCount = enrichedReports.filter(
-    (r) => r.status === "en_proceso"
-  ).length;
+  const processCount = enrichedReports.filter((r) => r.status === "en_proceso").length;
   const solvedCount = enrichedReports.filter((r) => r.status === "resuelto").length;
   const urgentCount = enrichedReports.filter((r) => r.parsedUrgent).length;
 
@@ -621,6 +724,38 @@ export default function App() {
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
   }, [enrichedReports]);
+
+  const handleSupportReport = async (report) => {
+    try {
+      const parsed = parseRichDescription(report.description);
+
+      const nextDescription = buildRichDescription({
+        barrio: parsed.barrio,
+        urgent: parsed.urgent,
+        description: parsed.cleanDescription,
+        photoUrls: parsed.photoUrls,
+        supports: (parsed.supports || 0) + 1,
+      });
+
+      const { data, error } = await supabase
+        .from("citizen_reports")
+        .update({
+          description: nextDescription,
+        })
+        .eq("id", report.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setReports((prev) =>
+        prev.map((item) => (item.id === report.id ? data : item))
+      );
+    } catch (err) {
+      console.error("SUPPORT REPORT ERROR:", err);
+      alert("No se pudo sumar tu apoyo.");
+    }
+  };
 
   if (authLoading) {
     return (
@@ -673,22 +808,13 @@ export default function App() {
               <TopTab active={view === "mapa"} onClick={() => setView("mapa")}>
                 Mapa
               </TopTab>
-              <TopTab
-                active={view === "proyectos"}
-                onClick={() => setView("proyectos")}
-              >
+              <TopTab active={view === "proyectos"} onClick={() => setView("proyectos")}>
                 Proyectos
               </TopTab>
-              <TopTab
-                active={view === "participar"}
-                onClick={() => setView("participar")}
-              >
+              <TopTab active={view === "participar"} onClick={() => setView("participar")}>
                 Participar
               </TopTab>
-              <TopTab
-                active={view === "seguimiento"}
-                onClick={() => setView("seguimiento")}
-              >
+              <TopTab active={view === "seguimiento"} onClick={() => setView("seguimiento")}>
                 Seguimiento
               </TopTab>
               <TopTab active={view === "perfil"} onClick={() => setView("perfil")}>
@@ -859,7 +985,7 @@ export default function App() {
                       icon={createReportIcon(report.status)}
                     >
                       <Popup className="jaha-popup">
-                        <div className="text-black min-w-[250px]">
+                        <div className="text-black min-w-[260px]">
                           <div className="flex items-center gap-2">
                             <span>{report.categoryMeta.icon}</span>
                             <div className="font-extrabold text-sm">{report.title}</div>
@@ -895,11 +1021,43 @@ export default function App() {
                                 Urgente
                               </span>
                             ) : null}
+
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-700">
+                              Apoyos: {report.parsedSupports || 0}
+                            </span>
                           </div>
 
-                          <div className="mt-2 text-xs text-neutral-500">
+                          {report.parsedPhotoUrls?.length ? (
+                            <div className="mt-3 grid grid-cols-3 gap-2">
+                              {report.parsedPhotoUrls.slice(0, 3).map((url, index) => (
+                                <a
+                                  key={`${url}-${index}`}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block overflow-hidden rounded-xl border border-neutral-200"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={`Evidencia ${index + 1}`}
+                                    className="h-20 w-full object-cover"
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          <div className="mt-3 text-xs text-neutral-500">
                             Reportado por: {report.full_name || "Ciudadano"}
                           </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSupportReport(report)}
+                            className="mt-3 w-full rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white"
+                          >
+                            Sumarme a este reclamo
+                          </button>
                         </div>
                       </Popup>
                     </Marker>
@@ -1148,6 +1306,37 @@ export default function App() {
                         </p>
                       </div>
                     </label>
+
+                    <div>
+                      <label className="mb-2 block text-sm text-white/75">
+                        Fotos de evidencia
+                      </label>
+
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleReportPhotos}
+                        className="block w-full rounded-2xl border border-white/10 bg-[#07141d] px-4 py-3 text-sm text-white"
+                      />
+
+                      {reportPhotos.length > 0 ? (
+                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {reportPhotos.map((file, index) => (
+                            <div
+                              key={`${file.name}-${index}`}
+                              className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]"
+                            >
+                              <img
+                                src={URL.createObjectURL(file)}
+                                alt={file.name}
+                                className="h-24 w-full object-cover"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -1427,6 +1616,20 @@ export default function App() {
             </div>
 
             <form onSubmit={handleCreateReport} className="space-y-4 px-5 py-5">
+              {duplicateReport && (
+                <div className="rounded-[22px] border border-amber-300/30 bg-amber-400/10 px-4 py-4 text-sm text-white">
+                  <p className="font-bold text-amber-200">
+                    Ya existe un reporte parecido cerca de esta ubicación.
+                  </p>
+                  <p className="mt-1 text-white/75">
+                    Título: {duplicateReport.title}
+                  </p>
+                  <p className="mt-1 text-white/60">
+                    Podés crear uno nuevo o sumarte al reclamo existente desde el mapa.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="mb-2 block text-sm text-white/75">Barrio</label>
                 <input
@@ -1478,6 +1681,37 @@ export default function App() {
                   </p>
                 </div>
               </label>
+
+              <div>
+                <label className="mb-2 block text-sm text-white/75">
+                  Fotos de evidencia
+                </label>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleReportPhotos}
+                  className="block w-full rounded-2xl border border-white/10 bg-[#041018] px-4 py-3 text-sm text-white"
+                />
+
+                {reportPhotos.length > 0 ? (
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {reportPhotos.map((file, index) => (
+                      <div
+                        key={`${file.name}-${index}`}
+                        className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]"
+                      >
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={file.name}
+                          className="h-24 w-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
