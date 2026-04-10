@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import {
   MapContainer,
@@ -136,12 +136,6 @@ function getProgressColor(progress) {
   if (progress >= 80) return "#10b981";
   if (progress >= 40) return "#f59e0b";
   return "#ef4444";
-}
-
-function getProgressSoft(progress) {
-  if (progress >= 80) return "rgba(16,185,129,0.18)";
-  if (progress >= 40) return "rgba(245,158,11,0.18)";
-  return "rgba(239,68,68,0.18)";
 }
 
 function getProgressLabel(progress) {
@@ -315,10 +309,10 @@ function TopTab({ active, onClick, children }) {
     <button
       onClick={onClick}
       className={[
-        "px-4 py-2.5 rounded-2xl text-sm font-semibold transition-all duration-200 border",
+        "min-w-[122px] px-5 py-3 rounded-[24px] text-[15px] font-semibold transition-all duration-200 border backdrop-blur-xl",
         active
-          ? "bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 border-teal-300 shadow-[0_0_22px_rgba(45,212,191,0.28)]"
-          : "bg-white/[0.04] text-white/70 border-white/10 hover:bg-white/[0.08] hover:text-white",
+          ? "bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 border-teal-300 shadow-[0_12px_30px_rgba(45,212,191,0.24)]"
+          : "bg-white/[0.035] text-white/72 border-white/10 hover:bg-white/[0.08] hover:text-white",
       ].join(" ")}
     >
       {children}
@@ -377,9 +371,7 @@ function SectionShell({ title, subtitle, right, children }) {
           <h2 className="text-xl sm:text-2xl font-black text-white tracking-[0.04em]">
             {title}
           </h2>
-          {subtitle ? (
-            <p className="mt-1 text-sm text-white/50">{subtitle}</p>
-          ) : null}
+          {subtitle ? <p className="mt-1 text-sm text-white/50">{subtitle}</p> : null}
         </div>
         {right}
       </div>
@@ -447,6 +439,10 @@ export default function App() {
   const [reportPhotos, setReportPhotos] = useState([]);
   const [duplicateReport, setDuplicateReport] = useState(null);
 
+  const [focusFlash, setFocusFlash] = useState(false);
+
+  const sectionRef = useRef(null);
+
   const [reportForm, setReportForm] = useState({
     category: "luz",
     title: "",
@@ -488,6 +484,22 @@ export default function App() {
     if (!session?.user) return;
     loadReports();
   }, [session]);
+
+  const goToView = (target) => {
+    setView(target);
+
+    setTimeout(() => {
+      if (sectionRef.current) {
+        sectionRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+
+        setFocusFlash(true);
+        setTimeout(() => setFocusFlash(false), 1200);
+      }
+    }, 80);
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -651,7 +663,7 @@ export default function App() {
       resetReportForm();
       setPickingOnMap(false);
       setReportModalOpen(false);
-      setView("mapa");
+      goToView("mapa");
       alert("Denuncia enviada correctamente.");
     } catch (err) {
       console.error("CREATE REPORT ERROR:", err);
@@ -660,12 +672,6 @@ export default function App() {
       setReportSaving(false);
     }
   };
-
-  const totalProjects = PROJECTS.length;
-  const completedProjects = PROJECTS.filter((p) => p.progress >= 80).length;
-  const avgProgress = Math.round(
-    PROJECTS.reduce((acc, p) => acc + p.progress, 0) / PROJECTS.length
-  );
 
   const currentUser = session?.user ?? null;
   const currentUserName =
@@ -777,57 +783,89 @@ export default function App() {
       <div className="pointer-events-none absolute inset-0 opacity-[0.08] bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:30px_30px]" />
       <div className="pointer-events-none absolute inset-0 opacity-[0.10] bg-[radial-gradient(circle_at_20%_20%,rgba(45,212,191,0.16),transparent_18%),radial-gradient(circle_at_80%_15%,rgba(34,211,238,0.12),transparent_14%),radial-gradient(circle_at_50%_75%,rgba(16,185,129,0.10),transparent_20%)]" />
 
-      <header className="relative z-[1001] border-b border-white/10 bg-[#07141d]/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="rounded-[22px] border border-white/10 bg-white/[0.06] backdrop-blur-xl p-2 shadow-[0_0_24px_rgba(34,211,238,0.14)]">
-              <img
-                src={logoJaha}
-                alt="JAHA 2041"
-                className="w-14 h-14 object-contain"
-              />
+      <header className="relative z-[1001] border-b border-white/10 bg-[#07141d]/82 backdrop-blur-2xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5">
+          <div className="rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] px-4 sm:px-5 py-4 shadow-[0_0_40px_rgba(34,211,238,0.10)]">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="rounded-[26px] border border-white/10 bg-white/[0.05] p-2.5 shadow-[0_0_28px_rgba(45,212,191,0.10)]">
+                    <img
+                      src={logoJaha}
+                      alt="JAHA 2041"
+                      className="h-16 w-16 sm:h-20 sm:w-20 object-contain"
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h1 className="text-[30px] sm:text-[44px] leading-none font-black tracking-[0.16em] text-white">
+                      JAHA <span className="text-teal-300">2041</span>
+                    </h1>
+                    <p className="mt-2 text-[11px] sm:text-[15px] uppercase tracking-[0.26em] text-white/45">
+                      Plataforma urbana inteligente · Minga Guazú
+                    </p>
+                  </div>
+                </div>
+
+                <div className="max-w-[180px] sm:max-w-[260px] text-right shrink-0 pt-1">
+                  <p className="text-lg sm:text-2xl font-black text-white truncate">
+                    {currentUserName}
+                  </p>
+                  <p className="mt-1 text-xs sm:text-sm text-white/45 truncate">
+                    {currentUserEmail}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <nav className="flex flex-wrap gap-3">
+                  <TopTab active={view === "mapa"} onClick={() => goToView("mapa")}>
+                    Mapa
+                  </TopTab>
+
+                  <TopTab
+                    active={view === "proyectos"}
+                    onClick={() => goToView("proyectos")}
+                  >
+                    Proyectos
+                  </TopTab>
+
+                  <TopTab
+                    active={view === "participar"}
+                    onClick={() => goToView("participar")}
+                  >
+                    Participar
+                  </TopTab>
+
+                  <TopTab
+                    active={view === "seguimiento"}
+                    onClick={() => goToView("seguimiento")}
+                  >
+                    Seguimiento
+                  </TopTab>
+
+                  <TopTab active={view === "perfil"} onClick={() => goToView("perfil")}>
+                    Perfil
+                  </TopTab>
+
+                  <TopTab
+                    active={view === "transparencia"}
+                    onClick={() => goToView("transparencia")}
+                  >
+                    Transparencia
+                  </TopTab>
+                </nav>
+
+                <div>
+                  <button
+                    onClick={handleLogout}
+                    className="inline-flex items-center rounded-[24px] border border-white/10 bg-white/[0.05] px-5 py-3 text-base font-bold text-white transition hover:bg-white/[0.10]"
+                  >
+                    Cerrar sesión
+                  </button>
+                </div>
+              </div>
             </div>
-
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-black tracking-[0.14em] text-white truncate">
-                JAHA <span className="text-teal-300">2041</span>
-              </h1>
-              <p className="text-xs sm:text-sm text-white/50 uppercase tracking-[0.16em]">
-                Plataforma urbana inteligente · Minga Guazú
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 xl:items-end">
-            <div className="text-right">
-              <p className="text-sm font-bold text-white">{currentUserName}</p>
-              <p className="text-xs text-white/50">{currentUserEmail}</p>
-            </div>
-
-            <nav className="flex flex-wrap gap-2">
-              <TopTab active={view === "mapa"} onClick={() => setView("mapa")}>
-                Mapa
-              </TopTab>
-              <TopTab active={view === "proyectos"} onClick={() => setView("proyectos")}>
-                Proyectos
-              </TopTab>
-              <TopTab active={view === "participar"} onClick={() => setView("participar")}>
-                Participar
-              </TopTab>
-              <TopTab active={view === "seguimiento"} onClick={() => setView("seguimiento")}>
-                Seguimiento
-              </TopTab>
-              <TopTab active={view === "perfil"} onClick={() => setView("perfil")}>
-                Perfil
-              </TopTab>
-            </nav>
-
-            <button
-              onClick={handleLogout}
-              className="w-fit px-4 py-2 rounded-2xl text-sm font-bold border border-white/10 bg-white/[0.05] hover:bg-white/[0.10] transition"
-            >
-              Cerrar sesión
-            </button>
           </div>
         </div>
       </header>
@@ -836,7 +874,7 @@ export default function App() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <InfoCard
             title="Proyectos activos"
-            value={totalProjects}
+            value={PROJECTS.length}
             subtitle="Frentes estratégicos disponibles en el sistema."
             tone="cyan"
           />
@@ -861,7 +899,15 @@ export default function App() {
         </div>
       </section>
 
-      <main className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 pb-6">
+      <main
+        ref={sectionRef}
+        className={[
+          "relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 pb-6 transition-all duration-500",
+          focusFlash
+            ? "rounded-[32px] ring-2 ring-cyan-400/40 shadow-[0_0_40px_rgba(34,211,238,0.25)]"
+            : "",
+        ].join(" ")}
+      >
         {view === "mapa" && (
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5">
             <div className="rounded-[32px] border border-white/10 bg-white/[0.05] backdrop-blur-xl overflow-hidden shadow-[0_0_35px_rgba(34,211,238,0.08)]">
@@ -876,7 +922,7 @@ export default function App() {
                 </div>
 
                 <button
-                  onClick={() => setView("proyectos")}
+                  onClick={() => goToView("proyectos")}
                   className="hidden sm:inline-flex items-center justify-center px-5 py-2.5 rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 font-bold shadow-[0_0_24px_rgba(45,212,191,0.22)] hover:scale-[1.02] transition"
                 >
                   Ver proyectos
@@ -1083,7 +1129,7 @@ export default function App() {
                 </button>
 
                 <button
-                  onClick={() => setView("proyectos")}
+                  onClick={() => goToView("proyectos")}
                   className="sm:hidden absolute bottom-4 right-4 z-[1100] px-5 py-3 rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 font-black shadow-[0_0_22px_rgba(45,212,191,0.28)]"
                 >
                   Ver proyectos
@@ -1153,7 +1199,7 @@ export default function App() {
               subtitle="Plan de Desarrollo Municipal · Horizonte 2041"
               right={
                 <button
-                  onClick={() => setView("mapa")}
+                  onClick={() => goToView("mapa")}
                   className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 font-black shadow-[0_0_24px_rgba(45,212,191,0.22)]"
                 >
                   Volver al mapa
@@ -1210,7 +1256,7 @@ export default function App() {
                         <button
                           onClick={() => {
                             setActiveProject(p.id);
-                            setView("mapa");
+                            goToView("mapa");
                           }}
                           className="px-4 py-2 rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 text-sm font-black transition"
                         >
@@ -1473,12 +1519,9 @@ export default function App() {
 
                       <p className="mt-2 text-3xl font-black text-white">{items.length}</p>
                       <p className="mt-2 text-sm text-white/55">
-                        {status === "pendiente" &&
-                          "Denuncias nuevas cargadas por vecinos."}
-                        {status === "en_proceso" &&
-                          "Casos que ya fueron tomados para acción."}
-                        {status === "resuelto" &&
-                          "Casos cerrados con respuesta visible."}
+                        {status === "pendiente" && "Denuncias nuevas cargadas por vecinos."}
+                        {status === "en_proceso" && "Casos que ya fueron tomados para acción."}
+                        {status === "resuelto" && "Casos cerrados con respuesta visible."}
                       </p>
                     </div>
                   );
@@ -1548,8 +1591,8 @@ export default function App() {
               <h3 className="text-lg font-black text-white">Sobre la plataforma</h3>
 
               <p className="mt-3 text-white/68 leading-relaxed">
-                JAHA 2041 combina mapa, participación ciudadana y seguimiento municipal
-                para convertir reclamos en visibilidad pública y acción real.
+                JAHA 2041 combina mapa, participación ciudadana, seguimiento municipal
+                y transparencia para convertir reclamos en visibilidad pública y acción real.
               </p>
 
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1560,6 +1603,8 @@ export default function App() {
                   "Seguimiento por estado",
                   "Barrios más participativos",
                   "Sesión segura con Supabase",
+                  "Transparencia municipal",
+                  "Denuncias con fotos",
                 ].map((item) => (
                   <div
                     key={item}
@@ -1570,6 +1615,139 @@ export default function App() {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {view === "transparencia" && (
+          <div className="space-y-5">
+            <SectionShell
+              title="Transparencia Municipal"
+              subtitle="Ingresos y egresos explicados de forma clara para el ciudadano."
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                <InfoCard
+                  title="Ingresos tributarios"
+                  value="5 áreas"
+                  subtitle="Impuesto inmobiliario, patentes, tasas y contribuciones."
+                  tone="green"
+                />
+                <InfoCard
+                  title="Ingresos no tributarios"
+                  value="2 áreas"
+                  subtitle="Multas y concesiones municipales."
+                  tone="cyan"
+                />
+                <InfoCard
+                  title="Transferencias"
+                  value="3 fuentes"
+                  subtitle="Royalties, FONAE y Tesoro Nacional."
+                  tone="amber"
+                />
+                <InfoCard
+                  title="Egresos principales"
+                  value="4 bloques"
+                  subtitle="Personal, servicios, inversión física y transferencias."
+                  tone="red"
+                />
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="rounded-[28px] border border-white/10 bg-[#08141d]/90 p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-black text-emerald-300">
+                        Ingresos Municipales
+                      </h3>
+                      <p className="mt-1 text-sm text-white/50">
+                        Principales fuentes de ingresos del municipio.
+                      </p>
+                    </div>
+
+                    <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+                      Visible
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-4 text-sm text-white/75">
+                    <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
+                      <p className="font-bold text-white">Ingresos tributarios</p>
+                      <ul className="mt-3 space-y-2">
+                        <li>🏠 Impuesto inmobiliario</li>
+                        <li>🚗 Patentes comerciales, profesionales, oficios y rodados</li>
+                        <li>🧹 Tasas por limpieza, barrido, residuos, iluminación y mercados</li>
+                        <li>🧱 Contribuciones especiales por pavimentación u obras</li>
+                      </ul>
+                    </div>
+
+                    <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
+                      <p className="font-bold text-white">Ingresos no tributarios</p>
+                      <ul className="mt-3 space-y-2">
+                        <li>⚠️ Multas por infracciones de tránsito o faltas administrativas</li>
+                        <li>🏢 Concesiones: estacionamientos, terminales y publicidad</li>
+                      </ul>
+                    </div>
+
+                    <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
+                      <p className="font-bold text-white">Transferencias y otros ingresos</p>
+                      <ul className="mt-3 space-y-2">
+                        <li>💧 Royalties y compensaciones</li>
+                        <li>🍽️ FONAE</li>
+                        <li>🏛️ Tesoro Nacional</li>
+                        <li>🏗️ Ingresos de capital por venta de activos</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-white/10 bg-[#08141d]/90 p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-black text-red-300">
+                        Egresos Municipales
+                      </h3>
+                      <p className="mt-1 text-sm text-white/50">
+                        Principales categorías de egresos del municipio.
+                      </p>
+                    </div>
+
+                    <span className="rounded-full border border-red-400/20 bg-red-400/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-red-300">
+                      Control
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-4 text-sm text-white/75">
+                    <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
+                      <p className="font-bold text-white">Servicios personales</p>
+                      <ul className="mt-3 space-y-2">
+                        <li>👨‍💼 Sueldos y dietas</li>
+                        <li>💰 Aguinaldo, bonificaciones y gratificaciones</li>
+                        <li>🛠️ Contrataciones técnicas, salud y educación</li>
+                      </ul>
+                    </div>
+
+                    <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
+                      <p className="font-bold text-white">Servicios no personales y bienes</p>
+                      <ul className="mt-3 space-y-2">
+                        <li>⛽ Combustibles</li>
+                        <li>🏗️ Materiales de construcción y suministros</li>
+                        <li>🚘 Mantenimiento de vehículos</li>
+                        <li>🧾 Limpieza, seguridad y publicidad</li>
+                      </ul>
+                    </div>
+
+                    <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
+                      <p className="font-bold text-white">Inversión y transferencias</p>
+                      <ul className="mt-3 space-y-2">
+                        <li>🛣️ Obras públicas: pavimentación, desagües y empedrados</li>
+                        <li>🏫 Mejora de escuelas y espacios públicos</li>
+                        <li>🎓 Becas y ayudas sociales</li>
+                        <li>📉 Servicio de deuda y transferencias</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </SectionShell>
           </div>
         )}
       </main>
@@ -1621,9 +1799,7 @@ export default function App() {
                   <p className="font-bold text-amber-200">
                     Ya existe un reporte parecido cerca de esta ubicación.
                   </p>
-                  <p className="mt-1 text-white/75">
-                    Título: {duplicateReport.title}
-                  </p>
+                  <p className="mt-1 text-white/75">Título: {duplicateReport.title}</p>
                   <p className="mt-1 text-white/60">
                     Podés crear uno nuevo o sumarte al reclamo existente desde el mapa.
                   </p>
