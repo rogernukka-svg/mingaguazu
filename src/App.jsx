@@ -1,14 +1,17 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import {
   MapContainer,
   TileLayer,
   Marker,
   Popup,
   Circle,
+  useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import logoJaha from "./assets/logojahabicolor.png";
+import supabase from "./supabaseClient";
 
 /* =====================================================
    CENTRO REAL – MINGA GUAZÚ
@@ -65,7 +68,7 @@ const MAP_POINTS = [
     lat: -25.4952,
     lng: -54.8424,
     radius: 1600,
-    color: "#2563eb",
+    color: "#22d3ee",
   },
   {
     id: "traf",
@@ -74,7 +77,7 @@ const MAP_POINTS = [
     lat: -25.4917,
     lng: -54.8401,
     radius: 1400,
-    color: "#f59e0b",
+    color: "#60a5fa",
   },
   {
     id: "sal",
@@ -83,7 +86,7 @@ const MAP_POINTS = [
     lat: -25.4989,
     lng: -54.8397,
     radius: 1350,
-    color: "#16a34a",
+    color: "#34d399",
   },
   {
     id: "edu",
@@ -92,23 +95,53 @@ const MAP_POINTS = [
     lat: -25.4947,
     lng: -54.8468,
     radius: 1450,
-    color: "#9333ea",
+    color: "#2dd4bf",
   },
 ];
 
+const CATEGORY_META = {
+  luz: { label: "Luz", icon: "💡" },
+  agua: { label: "Agua", icon: "💧" },
+  tanque_agua: { label: "Tanque de agua", icon: "🚰" },
+  comision_vecinal: { label: "Comisión vecinal", icon: "👥" },
+  calle: { label: "Calle", icon: "🚧" },
+  basura: { label: "Basura", icon: "🗑️" },
+  otro: { label: "Otro", icon: "📍" },
+};
+
+const STATUS_META = {
+  pendiente: {
+    label: "Reciente",
+    color: "#ef4444",
+    soft: "rgba(239,68,68,0.16)",
+  },
+  en_proceso: {
+    label: "En proceso",
+    color: "#f59e0b",
+    soft: "rgba(245,158,11,0.16)",
+  },
+  resuelto: {
+    label: "Resuelto",
+    color: "#10b981",
+    soft: "rgba(16,185,129,0.16)",
+  },
+};
+
+const STATUS_ORDER = ["pendiente", "en_proceso", "resuelto"];
+
 /* =====================================================
-   SEMÁFORO
+   HELPERS
 ===================================================== */
-function getSemaphore(progress) {
-  if (progress >= 80) return "green";
-  if (progress >= 40) return "yellow";
-  return "red";
+function getProgressColor(progress) {
+  if (progress >= 80) return "#10b981";
+  if (progress >= 40) return "#f59e0b";
+  return "#ef4444";
 }
 
-function getProgressColor(progress) {
-  if (progress >= 80) return "#22c55e";
-  if (progress >= 40) return "#facc15";
-  return "#ef4444";
+function getProgressSoft(progress) {
+  if (progress >= 80) return "rgba(16,185,129,0.18)";
+  if (progress >= 40) return "rgba(245,158,11,0.18)";
+  return "rgba(239,68,68,0.18)";
 }
 
 function getProgressLabel(progress) {
@@ -117,24 +150,33 @@ function getProgressLabel(progress) {
   return "Requiere atención";
 }
 
+function getStatusMeta(status) {
+  return STATUS_META[status] || STATUS_META.pendiente;
+}
+
+function getCategoryMeta(category) {
+  return CATEGORY_META[category] || CATEGORY_META.otro;
+}
+
 function createProjectIcon(progress) {
-  const color =
-    progress >= 80 ? "#22c55e" : progress >= 40 ? "#facc15" : "#ef4444";
+  const color = getProgressColor(progress);
 
   return L.divIcon({
     className: "",
     html: `
       <div style="
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
         border-radius: 999px;
         background: ${color};
-        border: 3px solid #ffffff;
-        box-shadow: 0 0 18px ${color};
+        border: 3px solid rgba(255,255,255,0.95);
+        box-shadow:
+          0 0 0 4px rgba(255,255,255,0.08),
+          0 0 22px ${color};
       "></div>
     `,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
     popupAnchor: [0, -12],
   });
 }
@@ -148,8 +190,10 @@ function createStrategicIcon(color) {
         height: 16px;
         border-radius: 999px;
         background: ${color};
-        border: 2px solid #ffffff;
-        box-shadow: 0 0 14px ${color};
+        border: 2px solid rgba(255,255,255,0.95);
+        box-shadow:
+          0 0 0 4px rgba(255,255,255,0.06),
+          0 0 16px ${color};
       "></div>
     `,
     iconSize: [16, 16],
@@ -158,49 +202,355 @@ function createStrategicIcon(color) {
   });
 }
 
-function HeaderButton({ active, onClick, children }) {
+function createReportIcon(status) {
+  const meta = getStatusMeta(status);
+
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: ${meta.color};
+        border: 3px solid rgba(255,255,255,0.95);
+        box-shadow:
+          0 0 0 4px rgba(255,255,255,0.08),
+          0 0 16px ${meta.color};
+      "></div>
+    `,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -10],
+  });
+}
+
+function parseRichDescription(description = "") {
+  const raw = String(description || "");
+  const lines = raw.split("\n").map((line) => line.trim()).filter(Boolean);
+
+  let barrio = "";
+  let urgent = false;
+  const cleanLines = [];
+
+  for (const line of lines) {
+    if (line.startsWith("[BARRIO]")) {
+      barrio = line.replace("[BARRIO]", "").trim();
+      continue;
+    }
+
+    if (line.startsWith("[URGENTE]")) {
+      urgent = line.replace("[URGENTE]", "").trim().toLowerCase() === "si";
+      continue;
+    }
+
+    cleanLines.push(line);
+  }
+
+  return {
+    barrio,
+    urgent,
+    cleanDescription: cleanLines.join("\n").trim(),
+  };
+}
+
+function buildRichDescription({ barrio, urgent, description }) {
+  const parts = [];
+
+  if (barrio?.trim()) parts.push(`[BARRIO] ${barrio.trim()}`);
+  parts.push(`[URGENTE] ${urgent ? "si" : "no"}`);
+  parts.push((description || "").trim());
+
+  return parts.join("\n");
+}
+
+/* =====================================================
+   UI PIECES
+===================================================== */
+function TopTab({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+      className={[
+        "px-4 py-2.5 rounded-2xl text-sm font-semibold transition-all duration-200 border",
         active
-          ? "bg-red-500 text-white shadow-[0_0_18px_rgba(255,0,0,0.35)]"
-          : "bg-white/5 text-white/75 hover:bg-white/10 hover:text-white"
-      }`}
+          ? "bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 border-teal-300 shadow-[0_0_22px_rgba(45,212,191,0.28)]"
+          : "bg-white/[0.04] text-white/70 border-white/10 hover:bg-white/[0.08] hover:text-white",
+      ].join(" ")}
     >
       {children}
     </button>
   );
 }
 
-function StatCard({ title, value, subtitle, color = "red" }) {
-  const glow =
-    color === "green"
-      ? "shadow-[0_0_24px_rgba(34,197,94,0.18)]"
-      : color === "yellow"
-      ? "shadow-[0_0_24px_rgba(250,204,21,0.18)]"
-      : "shadow-[0_0_24px_rgba(255,0,0,0.14)]";
+function InfoCard({ title, value, subtitle, tone = "cyan" }) {
+  const toneStyles =
+    tone === "green"
+      ? {
+          chip: "text-emerald-300",
+          glow: "shadow-[0_0_28px_rgba(16,185,129,0.10)]",
+        }
+      : tone === "amber"
+      ? {
+          chip: "text-amber-300",
+          glow: "shadow-[0_0_28px_rgba(245,158,11,0.10)]",
+        }
+      : tone === "red"
+      ? {
+          chip: "text-red-300",
+          glow: "shadow-[0_0_28px_rgba(239,68,68,0.10)]",
+        }
+      : {
+          chip: "text-cyan-300",
+          glow: "shadow-[0_0_28px_rgba(34,211,238,0.10)]",
+        };
 
   return (
     <div
-      className={`rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-4 ${glow}`}
+      className={`rounded-[28px] border border-white/10 bg-white/[0.05] backdrop-blur-xl p-4 sm:p-5 ${toneStyles.glow}`}
     >
-      <p className="text-xs uppercase tracking-[0.18em] text-white/50">
-        {title}
-      </p>
-      <p className="mt-2 text-2xl font-extrabold text-white">{value}</p>
-      <p className="mt-1 text-xs text-white/50">{subtitle}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] uppercase tracking-[0.22em] text-white/45">
+          {title}
+        </p>
+        <span
+          className={`text-[10px] uppercase tracking-[0.18em] ${toneStyles.chip}`}
+        >
+          activo
+        </span>
+      </div>
+
+      <p className="mt-3 text-3xl sm:text-4xl font-black text-white">{value}</p>
+      <p className="mt-2 text-sm text-white/50 leading-relaxed">{subtitle}</p>
     </div>
   );
 }
 
+function SectionShell({ title, subtitle, right, children }) {
+  return (
+    <div className="rounded-[32px] border border-white/10 bg-white/[0.05] backdrop-blur-xl overflow-hidden shadow-[0_0_35px_rgba(45,212,191,0.06)]">
+      <div className="px-5 sm:px-6 py-5 border-b border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-black text-white tracking-[0.04em]">
+            {title}
+          </h2>
+          {subtitle ? (
+            <p className="mt-1 text-sm text-white/50">{subtitle}</p>
+          ) : null}
+        </div>
+        {right}
+      </div>
+      <div className="p-5 sm:p-6">{children}</div>
+    </div>
+  );
+}
+
+function TinyLegendDot({ color, label }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span
+        className="w-3 h-3 rounded-full"
+        style={{ background: color, boxShadow: `0 0 12px ${color}` }}
+      />
+      <span className="text-sm text-white/75">{label}</span>
+    </div>
+  );
+}
+
+function CategoryPill({ active, icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition",
+        active
+          ? "border-cyan-300/40 bg-cyan-400/10 text-white"
+          : "border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.08]",
+      ].join(" ")}
+    >
+      <span>{icon}</span>
+      <span className="font-semibold">{label}</span>
+    </button>
+  );
+}
+
+function MapClickCapture({ enabled, onPick }) {
+  useMapEvents({
+    click(e) {
+      if (!enabled) return;
+      onPick(e.latlng);
+    },
+  });
+
+  return null;
+}
+
+/* =====================================================
+   MAIN APP
+===================================================== */
 export default function App() {
   const [view, setView] = useState("mapa");
   const [activeProject, setActiveProject] = useState(null);
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  const handleLogout = () => {
-    localStorage.removeItem("jaha_user");
-    window.location.href = "/";
+  const [reports, setReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportSaving, setReportSaving] = useState(false);
+
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [pickingOnMap, setPickingOnMap] = useState(false);
+
+  const [reportForm, setReportForm] = useState({
+    category: "luz",
+    title: "",
+    description: "",
+    barrio: "",
+    urgent: false,
+    lat: MINGA_GUAZU_CENTER[0],
+    lng: MINGA_GUAZU_CENTER[1],
+  });
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSession = async () => {
+      const { data } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      setSession(data.session ?? null);
+      setAuthLoading(false);
+    };
+
+    loadSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession ?? null);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    loadReports();
+  }, [session]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+  };
+
+  const loadReports = async () => {
+    try {
+      setReportsLoading(true);
+
+      const { data, error } = await supabase
+        .from("citizen_reports")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      setReports(data || []);
+    } catch (err) {
+      console.error("LOAD REPORTS ERROR:", err);
+    } finally {
+      setReportsLoading(false);
+    }
+  };
+
+  const handleReportField = (field, value) => {
+    setReportForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const openReportModal = ({
+    lat = MINGA_GUAZU_CENTER[0],
+    lng = MINGA_GUAZU_CENTER[1],
+  } = {}) => {
+    setReportForm((prev) => ({
+      ...prev,
+      lat,
+      lng,
+    }));
+    setReportModalOpen(true);
+  };
+
+  const resetReportForm = () => {
+    setReportForm({
+      category: "luz",
+      title: "",
+      description: "",
+      barrio: "",
+      urgent: false,
+      lat: MINGA_GUAZU_CENTER[0],
+      lng: MINGA_GUAZU_CENTER[1],
+    });
+  };
+
+  const handleCreateReport = async (e) => {
+    e.preventDefault();
+
+    if (!session?.user) return;
+
+    if (!reportForm.title.trim() || !reportForm.description.trim()) {
+      alert("Completá el título y la descripción.");
+      return;
+    }
+
+    setReportSaving(true);
+
+    try {
+      const payload = {
+        user_id: session.user.id,
+        full_name:
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          currentUserName,
+        email: session.user.email || "",
+        category: reportForm.category,
+        title: reportForm.title.trim(),
+        description: buildRichDescription({
+          barrio: reportForm.barrio,
+          urgent: reportForm.urgent,
+          description: reportForm.description,
+        }),
+        lat: Number(reportForm.lat),
+        lng: Number(reportForm.lng),
+        status: reportForm.urgent ? "en_proceso" : "pendiente",
+      };
+
+      const { data, error } = await supabase
+        .from("citizen_reports")
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setReports((prev) => [data, ...prev]);
+      resetReportForm();
+      setPickingOnMap(false);
+      setReportModalOpen(false);
+      setView("mapa");
+      alert("Denuncia enviada correctamente.");
+    } catch (err) {
+      console.error("CREATE REPORT ERROR:", err);
+      alert("No se pudo enviar la denuncia.");
+    } finally {
+      setReportSaving(false);
+    }
   };
 
   const totalProjects = PROJECTS.length;
@@ -214,16 +564,88 @@ export default function App() {
     [activeProject]
   );
 
-  return (
-    <div className="min-h-screen bg-black text-white flex flex-col relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,40,40,0.16),transparent_22%),radial-gradient(circle_at_bottom,rgba(255,40,40,0.10),transparent_18%),linear-gradient(to_bottom,#050505,#0b0000,#000000)] pointer-events-none" />
-      <div className="absolute inset-0 opacity-[0.04] pointer-events-none bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:32px_32px]" />
+  const currentUser = session?.user ?? null;
+  const currentUserName =
+    currentUser?.user_metadata?.name ||
+    currentUser?.email?.split("@")[0] ||
+    "Ciudadano";
+  const currentUserEmail = currentUser?.email || "Sin correo";
 
-      {/* ================= HEADER ================= */}
-      <header className="relative z-[1001] border-b border-red-900/40 bg-black/50 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="rounded-2xl border border-red-500/20 bg-white/[0.04] p-2 shadow-[0_0_20px_rgba(255,0,0,0.12)]">
+  const enrichedReports = useMemo(() => {
+    return reports.map((report) => {
+      const parsed = parseRichDescription(report.description);
+
+      return {
+        ...report,
+        parsedBarrio: parsed.barrio,
+        parsedUrgent: parsed.urgent,
+        cleanDescription: parsed.cleanDescription,
+        statusMeta: getStatusMeta(report.status),
+        categoryMeta: getCategoryMeta(report.category),
+      };
+    });
+  }, [reports]);
+
+  const recentCount = enrichedReports.filter((r) => r.status === "pendiente").length;
+  const processCount = enrichedReports.filter(
+    (r) => r.status === "en_proceso"
+  ).length;
+  const solvedCount = enrichedReports.filter((r) => r.status === "resuelto").length;
+  const urgentCount = enrichedReports.filter((r) => r.parsedUrgent).length;
+
+  const topBarrios = useMemo(() => {
+    const map = new Map();
+
+    for (const report of enrichedReports) {
+      const barrio = report.parsedBarrio?.trim();
+      if (!barrio) continue;
+      map.set(barrio, (map.get(barrio) || 0) + 1);
+    }
+
+    return [...map.entries()]
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  }, [enrichedReports]);
+
+  const topCitizens = useMemo(() => {
+    const map = new Map();
+
+    for (const report of enrichedReports) {
+      const name = report.full_name || "Ciudadano";
+      map.set(name, (map.get(name) || 0) + 1);
+    }
+
+    return [...map.entries()]
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  }, [enrichedReports]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#041018] text-white flex items-center justify-center">
+        <div className="rounded-[28px] border border-white/10 bg-white/[0.05] px-6 py-4 backdrop-blur-xl">
+          Cargando sesión...
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <div className="min-h-screen bg-[#041018] text-white relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.16),transparent_24%),radial-gradient(circle_at_bottom,rgba(16,185,129,0.14),transparent_22%),linear-gradient(to_bottom,#051019,#07141d,#071018)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.08] bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:30px_30px]" />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.10] bg-[radial-gradient(circle_at_20%_20%,rgba(45,212,191,0.16),transparent_18%),radial-gradient(circle_at_80%_15%,rgba(34,211,238,0.12),transparent_14%),radial-gradient(circle_at_50%_75%,rgba(16,185,129,0.10),transparent_20%)]" />
+
+      <header className="relative z-[1001] border-b border-white/10 bg-[#07141d]/80 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="rounded-[22px] border border-white/10 bg-white/[0.06] backdrop-blur-xl p-2 shadow-[0_0_24px_rgba(34,211,238,0.14)]">
               <img
                 src={logoJaha}
                 alt="JAHA 2041"
@@ -231,53 +653,52 @@ export default function App() {
               />
             </div>
 
-            <div>
-              <h1 className="text-xl sm:text-2xl font-extrabold tracking-[0.18em] text-white">
-                JAHA <span className="text-red-400">2041</span>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-black tracking-[0.14em] text-white truncate">
+                JAHA <span className="text-teal-300">2041</span>
               </h1>
-              <p className="text-xs sm:text-sm text-white/55 uppercase tracking-[0.18em]">
+              <p className="text-xs sm:text-sm text-white/50 uppercase tracking-[0.16em]">
                 Plataforma urbana inteligente · Minga Guazú
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="flex flex-col gap-3 xl:items-end">
+            <div className="text-right">
+              <p className="text-sm font-bold text-white">{currentUserName}</p>
+              <p className="text-xs text-white/50">{currentUserEmail}</p>
+            </div>
+
             <nav className="flex flex-wrap gap-2">
-              <HeaderButton
-                active={view === "mapa"}
-                onClick={() => setView("mapa")}
-              >
+              <TopTab active={view === "mapa"} onClick={() => setView("mapa")}>
                 Mapa
-              </HeaderButton>
-              <HeaderButton
+              </TopTab>
+              <TopTab
                 active={view === "proyectos"}
                 onClick={() => setView("proyectos")}
               >
                 Proyectos
-              </HeaderButton>
-              <HeaderButton
+              </TopTab>
+              <TopTab
                 active={view === "participar"}
                 onClick={() => setView("participar")}
               >
                 Participar
-              </HeaderButton>
-              <HeaderButton
+              </TopTab>
+              <TopTab
                 active={view === "seguimiento"}
                 onClick={() => setView("seguimiento")}
               >
                 Seguimiento
-              </HeaderButton>
-              <HeaderButton
-                active={view === "perfil"}
-                onClick={() => setView("perfil")}
-              >
+              </TopTab>
+              <TopTab active={view === "perfil"} onClick={() => setView("perfil")}>
                 Perfil
-              </HeaderButton>
+              </TopTab>
             </nav>
 
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-full text-sm font-bold bg-white/5 text-white border border-red-500/30 hover:bg-red-600 hover:border-red-500 transition"
+              className="w-fit px-4 py-2 rounded-2xl text-sm font-bold border border-white/10 bg-white/[0.05] hover:bg-white/[0.10] transition"
             >
               Cerrar sesión
             </button>
@@ -285,48 +706,52 @@ export default function App() {
         </div>
       </header>
 
-      {/* ================= DASH TOP ================= */}
       <section className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 pt-5 pb-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <InfoCard
             title="Proyectos activos"
             value={totalProjects}
-            subtitle="Frentes estratégicos cargados"
+            subtitle="Frentes estratégicos disponibles en el sistema."
+            tone="cyan"
           />
-          <StatCard
-            title="Promedio general"
-            value={`${avgProgress}%`}
-            subtitle="Nivel de ejecución del plan"
-            color="yellow"
+          <InfoCard
+            title="Denuncias recientes"
+            value={recentCount}
+            subtitle="Reportes nuevos esperando atención."
+            tone="red"
           />
-          <StatCard
-            title="Avance sólido"
-            value={completedProjects}
-            subtitle="Proyectos con semáforo verde"
-            color="green"
+          <InfoCard
+            title="En proceso"
+            value={processCount}
+            subtitle="Casos que ya están siendo trabajados."
+            tone="amber"
+          />
+          <InfoCard
+            title="Resueltas"
+            value={solvedCount}
+            subtitle="Casos cerrados y con avance visible."
+            tone="green"
           />
         </div>
       </section>
 
-      {/* ================= CONTENIDO ================= */}
-      <main className="relative z-10 flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 pb-6">
-        {/* ================= MAPA ================= */}
+      <main className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 pb-6">
         {view === "mapa" && (
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5">
-            <div className="relative overflow-hidden rounded-3xl border border-red-900/30 bg-white/[0.03] backdrop-blur-md shadow-[0_0_40px_rgba(255,0,0,0.10)]">
-              <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between gap-4">
+            <div className="rounded-[32px] border border-white/10 bg-white/[0.05] backdrop-blur-xl overflow-hidden shadow-[0_0_35px_rgba(34,211,238,0.08)]">
+              <div className="px-5 sm:px-6 py-5 border-b border-white/10 flex items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-lg sm:text-xl font-extrabold text-white tracking-[0.08em]">
+                  <h2 className="text-xl sm:text-2xl font-black tracking-[0.04em]">
                     Centro Urbano Inteligente
                   </h2>
-                  <p className="text-sm text-white/55">
-                    Visualización geográfica de proyectos y puntos estratégicos
+                  <p className="mt-1 text-sm text-white/50">
+                    Tocá el mapa para reportar. Los colores muestran el estado de las denuncias.
                   </p>
                 </div>
 
                 <button
                   onClick={() => setView("proyectos")}
-                  className="hidden sm:inline-flex bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-full font-bold shadow-[0_0_20px_rgba(255,0,0,0.35)] transition"
+                  className="hidden sm:inline-flex items-center justify-center px-5 py-2.5 rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 font-bold shadow-[0_0_24px_rgba(45,212,191,0.22)] hover:scale-[1.02] transition"
                 >
                   Ver proyectos
                 </button>
@@ -343,20 +768,21 @@ export default function App() {
                   maxBoundsViscosity={1.0}
                   className="h-full w-full z-0"
                 >
+                  <MapClickCapture
+                    enabled={true}
+                    onPick={({ lat, lng }) => {
+                      setPickingOnMap(true);
+                      openReportModal({ lat, lng });
+                    }}
+                  />
+
                   <TileLayer
                     attribution="&copy; OpenStreetMap & Carto"
                     url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                   />
 
                   {PROJECTS.map((p) => {
-                    const s = getSemaphore(p.progress);
-                    const color =
-                      s === "green"
-                        ? "#22c55e"
-                        : s === "yellow"
-                        ? "#facc15"
-                        : "#ef4444";
-
+                    const color = getProgressColor(p.progress);
                     const isActive = activeProject === p.id;
 
                     return (
@@ -368,7 +794,7 @@ export default function App() {
                             pathOptions={{
                               color,
                               fillColor: color,
-                              fillOpacity: 0.18,
+                              fillOpacity: 0.16,
                               weight: 2,
                             }}
                           />
@@ -382,10 +808,8 @@ export default function App() {
                           }}
                         >
                           <Popup className="jaha-popup">
-                            <div className="text-black min-w-[220px]">
-                              <div className="font-extrabold text-sm">
-                                {p.name}
-                              </div>
+                            <div className="text-black min-w-[230px]">
+                              <div className="font-extrabold text-sm">{p.name}</div>
                               <div className="mt-1 text-xs text-neutral-700">
                                 Área: {p.area}
                               </div>
@@ -411,19 +835,14 @@ export default function App() {
                           pathOptions={{
                             color: p.color,
                             fillColor: p.color,
-                            fillOpacity: 0.10,
+                            fillOpacity: 0.09,
                             weight: 1.5,
                           }}
                         />
-                        <Marker
-                          position={[p.lat, p.lng]}
-                          icon={createStrategicIcon(p.color)}
-                        >
+                        <Marker position={[p.lat, p.lng]} icon={createStrategicIcon(p.color)}>
                           <Popup className="jaha-popup">
-                            <div className="text-black min-w-[210px]">
-                              <div className="font-extrabold text-sm">
-                                {p.name}
-                              </div>
+                            <div className="text-black min-w-[220px]">
+                              <div className="font-extrabold text-sm">{p.name}</div>
                               <div className="mt-1 text-xs text-neutral-700">
                                 Tipo: {p.type}
                               </div>
@@ -432,384 +851,516 @@ export default function App() {
                         </Marker>
                       </React.Fragment>
                     ))}
+
+                  {enrichedReports.map((report) => (
+                    <Marker
+                      key={report.id}
+                      position={[Number(report.lat), Number(report.lng)]}
+                      icon={createReportIcon(report.status)}
+                    >
+                      <Popup className="jaha-popup">
+                        <div className="text-black min-w-[250px]">
+                          <div className="flex items-center gap-2">
+                            <span>{report.categoryMeta.icon}</span>
+                            <div className="font-extrabold text-sm">{report.title}</div>
+                          </div>
+
+                          <div className="mt-1 text-xs text-neutral-700">
+                            Categoría: {report.categoryMeta.label}
+                          </div>
+
+                          {report.parsedBarrio ? (
+                            <div className="mt-1 text-xs text-neutral-700">
+                              Barrio: {report.parsedBarrio}
+                            </div>
+                          ) : null}
+
+                          <div className="mt-2 text-sm text-neutral-800">
+                            {report.cleanDescription}
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span
+                              className="rounded-full px-2 py-1 text-[11px] font-bold"
+                              style={{
+                                background: report.statusMeta.soft,
+                                color: report.statusMeta.color,
+                              }}
+                            >
+                              {report.statusMeta.label}
+                            </span>
+
+                            {report.parsedUrgent ? (
+                              <span className="rounded-full bg-red-100 px-2 py-1 text-[11px] font-bold text-red-600">
+                                Urgente
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <div className="mt-2 text-xs text-neutral-500">
+                            Reportado por: {report.full_name || "Ciudadano"}
+                          </div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
                 </MapContainer>
+
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[#07141d]/28 to-transparent z-[500]" />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#07141d]/28 to-transparent z-[500]" />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickingOnMap(false);
+                    openReportModal();
+                  }}
+                  className="absolute bottom-5 left-5 z-[1200] flex items-center gap-2 rounded-full bg-white px-4 py-3 text-[#041018] shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition hover:scale-[1.03] active:scale-[0.98]"
+                  aria-label="Nueva denuncia ciudadana"
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#041018] text-white text-xl font-black">
+                    +
+                  </span>
+                  <span className="text-sm font-bold">Reportar</span>
+                </button>
 
                 <button
                   onClick={() => setView("proyectos")}
-                  className="sm:hidden absolute bottom-4 right-4 z-[1000] bg-red-600 text-white px-5 py-3 rounded-full font-bold shadow-[0_0_25px_rgba(255,0,0,0.45)]"
+                  className="sm:hidden absolute bottom-4 right-4 z-[1100] px-5 py-3 rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 font-black shadow-[0_0_22px_rgba(45,212,191,0.28)]"
                 >
                   Ver proyectos
                 </button>
               </div>
             </div>
 
-            {/* Panel lateral */}
-            <aside className="rounded-3xl border border-red-900/30 bg-white/[0.04] backdrop-blur-md p-5 shadow-[0_0_30px_rgba(255,0,0,0.10)]">
+            <aside className="rounded-[32px] border border-white/10 bg-white/[0.05] backdrop-blur-xl p-5 shadow-[0_0_35px_rgba(34,211,238,0.06)]">
               <div className="flex items-center gap-3">
-                <img
-                  src={logoJaha}
-                  alt="JAHA"
-                  className="w-12 h-12 object-contain rounded-xl"
-                />
+                <div className="rounded-[18px] border border-white/10 bg-white/[0.05] p-2">
+                  <img src={logoJaha} alt="JAHA" className="w-12 h-12 object-contain" />
+                </div>
+
                 <div>
-                  <h3 className="text-lg font-extrabold tracking-[0.08em]">
+                  <h3 className="text-lg font-black tracking-[0.04em]">
                     Panel rápido
                   </h3>
-                  <p className="text-xs text-white/50 uppercase tracking-[0.16em]">
-                    Acceso visual
+                  <p className="text-xs text-white/45 uppercase tracking-[0.16em]">
+                    lectura fácil
                   </p>
                 </div>
               </div>
 
-              {!selectedProject ? (
-                <div className="mt-6 space-y-4">
-                  <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-red-300/70">
-                      Cómo usar
-                    </p>
-                    <p className="mt-2 text-white/80 text-sm leading-relaxed">
-                      Tocá un punto del mapa para ver el proyecto. Si querés más
-                      detalle, entrá a la sección <b>Proyectos</b>.
-                    </p>
-                  </div>
+              <div className="mt-6 space-y-4">
+                <div className="rounded-[24px] border border-white/10 bg-[#08141d] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.20em] text-cyan-300/80">
+                    Cómo usar
+                  </p>
+                  <p className="mt-2 text-sm text-white/78 leading-relaxed">
+                    Tocá el mapa o el botón <b>Reportar</b>. La denuncia se abre con ubicación automática.
+                  </p>
+                </div>
 
-                  <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                    <p className="text-sm font-bold text-white mb-3">
-                      Referencias
-                    </p>
-
-                    <div className="space-y-3 text-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]" />
-                        <span className="text-white/75">
-                          Verde · avance sólido
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="w-3 h-3 rounded-full bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.8)]" />
-                        <span className="text-white/75">
-                          Amarillo · en desarrollo
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
-                        <span className="text-white/75">
-                          Rojo · requiere atención
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                    <p className="text-sm font-bold text-white">
-                      Lectura rápida
-                    </p>
-                    <p className="mt-2 text-sm text-white/65 leading-relaxed">
-                      Este panel fue pensado para que cualquier persona pueda
-                      entender el estado de los proyectos sin complicaciones.
-                    </p>
+                <div className="rounded-[24px] border border-white/10 bg-[#08141d] p-4">
+                  <p className="text-sm font-bold text-white mb-3">Estado ciudadano</p>
+                  <div className="space-y-3">
+                    <TinyLegendDot color="#ef4444" label="Rojo · reciente" />
+                    <TinyLegendDot color="#f59e0b" label="Amarillo · en proceso" />
+                    <TinyLegendDot color="#10b981" label="Verde · resuelto" />
                   </div>
                 </div>
-              ) : (
-                <div className="mt-6">
-                  <div className="rounded-2xl border border-white/10 bg-black/35 p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-red-300/70">
-                      Proyecto seleccionado
-                    </p>
 
-                    <h4 className="mt-2 text-lg font-extrabold text-white">
-                      {selectedProject.name}
-                    </h4>
-
-                    <p className="mt-2 text-sm text-white/65 leading-relaxed">
-                      {selectedProject.description}
-                    </p>
-
-                    <div className="mt-4 flex items-center justify-between">
-                      <span className="text-sm text-white/70">Área</span>
-                      <span className="text-sm font-bold text-white">
-                        {selectedProject.area}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="text-sm text-white/70">Avance</span>
-                      <span
-                        className="text-sm font-extrabold"
-                        style={{
-                          color: getProgressColor(selectedProject.progress),
-                        }}
-                      >
-                        {selectedProject.progress}%
-                      </span>
-                    </div>
-
-                    <div className="mt-4 h-3 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${selectedProject.progress}%`,
-                          background: getProgressColor(selectedProject.progress),
-                          boxShadow: `0 0 18px ${getProgressColor(
-                            selectedProject.progress
-                          )}`,
-                        }}
-                      />
-                    </div>
-
-                    <p className="mt-3 text-xs uppercase tracking-[0.16em] text-white/55">
-                      {getProgressLabel(selectedProject.progress)}
-                    </p>
-
-                    <button
-                      onClick={() => setActiveProject(null)}
-                      className="mt-5 w-full rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 py-2.5 font-bold text-white transition"
-                    >
-                      Limpiar selección
-                    </button>
-                  </div>
+                <div className="rounded-[24px] border border-white/10 bg-[#08141d] p-4">
+                  <p className="text-sm font-bold text-white">Urgencias activas</p>
+                  <p className="mt-2 text-2xl font-black text-red-300">{urgentCount}</p>
+                  <p className="mt-1 text-sm text-white/55">
+                    Casos marcados como prioritarios por vecinos.
+                  </p>
                 </div>
-              )}
+
+                <div className="rounded-[24px] border border-white/10 bg-[#08141d] p-4">
+                  <p className="text-sm font-bold text-white">Usuario conectado</p>
+                  <p className="mt-2 text-sm text-white/65 leading-relaxed">
+                    {currentUserName}
+                  </p>
+                  <p className="mt-1 text-xs text-white/45">{currentUserEmail}</p>
+                </div>
+              </div>
             </aside>
           </div>
         )}
 
-        {/* ================= PROYECTOS ================= */}
         {view === "proyectos" && (
           <div className="space-y-5">
-            <div className="rounded-3xl border border-red-900/30 bg-white/[0.04] backdrop-blur-md p-5 sm:p-6 shadow-[0_0_35px_rgba(255,0,0,0.10)]">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-[0.08em]">
-                    Proyectos Estratégicos
-                  </h2>
-                  <p className="text-white/55 text-sm mt-1">
-                    Plan de Desarrollo Municipal · Horizonte 2041
-                  </p>
-                </div>
-
+            <SectionShell
+              title="Proyectos Estratégicos"
+              subtitle="Plan de Desarrollo Municipal · Horizonte 2041"
+              right={
                 <button
                   onClick={() => setView("mapa")}
-                  className="bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-full font-bold shadow-[0_0_20px_rgba(255,0,0,0.35)] transition"
+                  className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 font-black shadow-[0_0_24px_rgba(45,212,191,0.22)]"
                 >
                   Volver al mapa
                 </button>
+              }
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {PROJECTS.map((p) => {
+                  const color = getProgressColor(p.progress);
+
+                  return (
+                    <div
+                      key={p.id}
+                      className="rounded-[28px] border border-white/10 bg-[#08141d]/90 p-5 shadow-[0_0_30px_rgba(34,211,238,0.04)] hover:translate-y-[-2px] transition"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-black text-white">{p.name}</h3>
+                          <p className="text-sm text-white/50 mt-1">{p.area}</p>
+                        </div>
+
+                        <span
+                          className="w-4 h-4 rounded-full shrink-0"
+                          style={{
+                            background: color,
+                            boxShadow: `0 0 14px ${color}`,
+                          }}
+                        />
+                      </div>
+
+                      <p className="mt-4 text-sm text-white/68 leading-relaxed">
+                        {p.description}
+                      </p>
+
+                      <div className="mt-5 flex items-center justify-between">
+                        <span className="text-sm text-white/60">Avance actual</span>
+                        <span className="font-black" style={{ color }}>
+                          {p.progress}%
+                        </span>
+                      </div>
+
+                      <div className="mt-3 h-3 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${p.progress}%`,
+                            background: color,
+                            boxShadow: `0 0 18px ${color}`,
+                          }}
+                        />
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => {
+                            setActiveProject(p.id);
+                            setView("mapa");
+                          }}
+                          className="px-4 py-2 rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 text-slate-950 text-sm font-black transition"
+                        >
+                          Ver en mapa
+                        </button>
+
+                        <button className="px-4 py-2 rounded-2xl border border-white/10 bg-white/[0.05] hover:bg-white/[0.08] text-white text-sm font-semibold transition">
+                          Ver detalle
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            </SectionShell>
+          </div>
+        )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {PROJECTS.map((p) => {
-                const s = getSemaphore(p.progress);
-                const barColor =
-                  s === "green"
-                    ? "#22c55e"
-                    : s === "yellow"
-                    ? "#facc15"
-                    : "#ef4444";
+        {view === "participar" && (
+          <div className="space-y-5">
+            <SectionShell
+              title="Denuncias Ciudadanas"
+              subtitle="Participación real del vecino, con barrio, urgencia y seguimiento."
+            >
+              <div className="grid grid-cols-1 xl:grid-cols-[1.05fr_0.95fr] gap-5">
+                <div className="rounded-[28px] border border-white/10 bg-[#08141d]/90 p-5 shadow-[0_0_30px_rgba(34,211,238,0.04)]">
+                  <h3 className="text-lg font-black text-white">Nueva denuncia</h3>
+                  <p className="mt-2 text-sm text-white/65 leading-relaxed">
+                    Elegí una categoría, escribí claro qué está pasando y marcá si es urgente.
+                  </p>
 
-                return (
-                  <div
-                    key={p.id}
-                    className="rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-5 shadow-[0_0_26px_rgba(255,0,0,0.08)] hover:translate-y-[-2px] transition"
-                  >
-                    <div className="flex items-start justify-between gap-4">
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {Object.entries(CATEGORY_META).map(([key, meta]) => (
+                      <CategoryPill
+                        key={key}
+                        active={reportForm.category === key}
+                        icon={meta.icon}
+                        label={meta.label}
+                        onClick={() => handleReportField("category", key)}
+                      />
+                    ))}
+                  </div>
+
+                  <form onSubmit={handleCreateReport} className="mt-5 space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm text-white/75">Barrio</label>
+                      <input
+                        type="text"
+                        value={reportForm.barrio}
+                        onChange={(e) => handleReportField("barrio", e.target.value)}
+                        placeholder="Ej: Santa Mónica"
+                        className="w-full rounded-2xl border border-white/10 bg-[#07141d] px-4 py-3 text-white outline-none placeholder:text-white/30"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm text-white/75">
+                        Título corto
+                      </label>
+                      <input
+                        type="text"
+                        value={reportForm.title}
+                        onChange={(e) => handleReportField("title", e.target.value)}
+                        placeholder="Ej: En mi barrio no tenemos luz"
+                        className="w-full rounded-2xl border border-white/10 bg-[#07141d] px-4 py-3 text-white outline-none placeholder:text-white/30"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm text-white/75">
+                        Descripción
+                      </label>
+                      <textarea
+                        rows={5}
+                        value={reportForm.description}
+                        onChange={(e) => handleReportField("description", e.target.value)}
+                        placeholder="Contá qué pasa, desde cuándo y cómo afecta al barrio."
+                        className="w-full rounded-2xl border border-white/10 bg-[#07141d] px-4 py-3 text-white outline-none placeholder:text-white/30 resize-none"
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-3 rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={reportForm.urgent}
+                        onChange={(e) => handleReportField("urgent", e.target.checked)}
+                        className="h-4 w-4"
+                      />
                       <div>
-                        <h3 className="text-lg font-extrabold text-white">
-                          {p.name}
-                        </h3>
-                        <p className="text-sm text-white/50 mt-1">{p.area}</p>
+                        <p className="text-sm font-bold text-white">¿Es urgente?</p>
+                        <p className="text-xs text-white/55">
+                          Esto ayuda a priorizar casos sensibles.
+                        </p>
+                      </div>
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-2 block text-sm text-white/75">
+                          Latitud
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={reportForm.lat}
+                          onChange={(e) => handleReportField("lat", e.target.value)}
+                          className="w-full rounded-2xl border border-white/10 bg-[#07141d] px-4 py-3 text-white outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm text-white/75">
+                          Longitud
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={reportForm.lng}
+                          onChange={(e) => handleReportField("lng", e.target.value)}
+                          className="w-full rounded-2xl border border-white/10 bg-[#07141d] px-4 py-3 text-white outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-[22px] border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-sm text-white/75">
+                      Podés tocar el mapa y abrir la denuncia automáticamente con la ubicación ya marcada.
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={reportSaving}
+                      className="w-full rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 px-4 py-3 font-black text-slate-950 shadow-[0_0_24px_rgba(45,212,191,0.22)] transition disabled:opacity-60"
+                    >
+                      {reportSaving ? "Enviando denuncia..." : "Enviar denuncia"}
+                    </button>
+                  </form>
+                </div>
+
+                <div className="rounded-[28px] border border-white/10 bg-[#08141d]/90 p-5 shadow-[0_0_30px_rgba(34,211,238,0.04)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg font-black text-white">Ranking y comunidad</h3>
+                    <button
+                      onClick={loadReports}
+                      className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-4">
+                    <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-sm font-bold text-white">Barrios más participativos</p>
+                      <div className="mt-3 space-y-3">
+                        {topBarrios.length === 0 ? (
+                          <p className="text-sm text-white/55">Todavía no hay barrios cargados.</p>
+                        ) : (
+                          topBarrios.map((item, index) => (
+                            <div
+                              key={item.name}
+                              className="flex items-center justify-between rounded-2xl bg-white/[0.04] px-3 py-2"
+                            >
+                              <span className="text-sm text-white/80">
+                                #{index + 1} {item.name}
+                              </span>
+                              <span className="text-sm font-black text-cyan-300">
+                                {item.total}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-sm font-bold text-white">Vecinos activos</p>
+                      <div className="mt-3 space-y-3">
+                        {topCitizens.length === 0 ? (
+                          <p className="text-sm text-white/55">Todavía no hay participación registrada.</p>
+                        ) : (
+                          topCitizens.map((item, index) => (
+                            <div
+                              key={`${item.name}-${index}`}
+                              className="flex items-center justify-between rounded-2xl bg-white/[0.04] px-3 py-2"
+                            >
+                              <span className="text-sm text-white/80">
+                                #{index + 1} {item.name}
+                              </span>
+                              <span className="text-sm font-black text-emerald-300">
+                                {item.total}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </SectionShell>
+          </div>
+        )}
+
+        {view === "seguimiento" && (
+          <div className="space-y-5">
+            <SectionShell
+              title="Seguimiento ciudadano"
+              subtitle="Visibilidad del proceso para generar confianza."
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {STATUS_ORDER.map((status) => {
+                  const meta = getStatusMeta(status);
+                  const items = enrichedReports.filter((r) => r.status === status);
+
+                  return (
+                    <div
+                      key={status}
+                      className="rounded-[24px] border border-white/10 bg-[#08141d]/90 p-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white">{meta.label}</span>
+                        <span
+                          className="w-4 h-4 rounded-full"
+                          style={{
+                            background: meta.color,
+                            boxShadow: `0 0 12px ${meta.color}`,
+                          }}
+                        />
+                      </div>
+
+                      <p className="mt-2 text-3xl font-black text-white">{items.length}</p>
+                      <p className="mt-2 text-sm text-white/55">
+                        {status === "pendiente" &&
+                          "Denuncias nuevas cargadas por vecinos."}
+                        {status === "en_proceso" &&
+                          "Casos que ya fueron tomados para acción."}
+                        {status === "resuelto" &&
+                          "Casos cerrados con respuesta visible."}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {enrichedReports.slice(0, 6).map((report) => (
+                  <div
+                    key={report.id}
+                    className="rounded-[24px] border border-white/10 bg-[#08141d]/90 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-black text-white flex items-center gap-2">
+                          <span>{report.categoryMeta.icon}</span>
+                          <span>{report.title}</span>
+                        </p>
+                        <p className="mt-1 text-xs text-white/45">
+                          {report.parsedBarrio || "Barrio no especificado"}
+                        </p>
                       </div>
 
                       <span
-                        className={`w-4 h-4 rounded-full shrink-0 ${
-                          s === "green"
-                            ? "bg-green-500"
-                            : s === "yellow"
-                            ? "bg-yellow-400"
-                            : "bg-red-500"
-                        }`}
-                        style={{ boxShadow: `0 0 14px ${barColor}` }}
-                      />
+                        className="rounded-full px-3 py-1 text-[11px] font-bold"
+                        style={{
+                          background: report.statusMeta.soft,
+                          color: report.statusMeta.color,
+                        }}
+                      >
+                        {report.statusMeta.label}
+                      </span>
                     </div>
 
-                    <p className="mt-4 text-sm text-white/65 leading-relaxed">
-                      {p.description}
+                    <p className="mt-3 text-sm text-white/68 leading-relaxed">
+                      {report.cleanDescription}
                     </p>
 
-                    <div className="mt-5 flex items-center justify-between">
-                      <span className="text-sm text-white/65">
-                        Avance actual
-                      </span>
-                      <span
-                        className="font-extrabold"
-                        style={{ color: barColor }}
-                      >
-                        {p.progress}%
-                      </span>
-                    </div>
-
-                    <div className="mt-3 h-3 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${p.progress}%`,
-                          background: barColor,
-                          boxShadow: `0 0 18px ${barColor}`,
-                        }}
-                      />
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button
-                        onClick={() => {
-                          setActiveProject(p.id);
-                          setView("mapa");
-                        }}
-                        className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold transition"
-                      >
-                        Ver en mapa
-                      </button>
-
-                      <button className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition">
-                        Ver detalle
-                      </button>
-                    </div>
+                    {report.parsedUrgent ? (
+                      <div className="mt-3 text-xs font-bold text-red-300">
+                        Prioridad alta
+                      </div>
+                    ) : null}
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            </SectionShell>
           </div>
         )}
 
-        {/* ================= PARTICIPAR ================= */}
-        {view === "participar" && (
-          <div className="space-y-5">
-            <div className="rounded-3xl border border-red-900/30 bg-white/[0.04] backdrop-blur-md p-6">
-              <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-[0.08em]">
-                Participación Ciudadana
-              </h2>
-              <p className="mt-2 text-sm text-white/55">
-                Módulos simples para conectar a la ciudadanía con el desarrollo
-                territorial.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {[
-                {
-                  emoji: "📊",
-                  title: "Encuestas por barrio",
-                  text: "Relevamiento simple para conocer necesidades y prioridades de cada zona.",
-                },
-                {
-                  emoji: "🚧",
-                  title: "Reportes urbanos",
-                  text: "Carga de problemas o necesidades sobre obras, servicios y espacios públicos.",
-                },
-                {
-                  emoji: "💡",
-                  title: "Información clara",
-                  text: "Seguimiento de avances con una experiencia fácil de entender.",
-                },
-                {
-                  emoji: "🗳️",
-                  title: "Proyectos participativos",
-                  text: "Espacio para acompañar decisiones y propuestas comunitarias.",
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  className="rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-5 shadow-[0_0_26px_rgba(255,0,0,0.07)]"
-                >
-                  <div className="text-3xl">{item.emoji}</div>
-                  <h3 className="mt-4 text-lg font-extrabold text-white">
-                    {item.title}
-                  </h3>
-                  <p className="mt-2 text-sm text-white/65 leading-relaxed">
-                    {item.text}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ================= SEGUIMIENTO ================= */}
-        {view === "seguimiento" && (
-          <div className="space-y-5">
-            <div className="rounded-3xl border border-red-900/30 bg-white/[0.04] backdrop-blur-md p-6">
-              <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-[0.08em]">
-                Seguimiento del Plan Minga Guazú 2041
-              </h2>
-              <p className="mt-2 text-sm text-white/55">
-                Sistema visual de monitoreo por ejes estratégicos.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { area: "Salud", color: "bg-yellow-400" },
-                { area: "Educación", color: "bg-yellow-400" },
-                { area: "Seguridad", color: "bg-green-500" },
-                { area: "Infraestructura", color: "bg-red-500" },
-                { area: "Agricultura", color: "bg-yellow-400" },
-                { area: "Tecnología y transparencia", color: "bg-green-500" },
-              ].map((a) => (
-                <div
-                  key={a.area}
-                  className="flex justify-between items-center rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-4"
-                >
-                  <span className="font-semibold text-white">{a.area}</span>
-                  <span className={`w-4 h-4 rounded-full ${a.color}`} />
-                </div>
-              ))}
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <p className="text-sm text-white/65 leading-relaxed">
-                Sistema de semáforo ciudadano:
-                <span className="text-green-400 font-semibold"> verde</span>{" "}
-                significa que avanza bien,
-                <span className="text-yellow-300 font-semibold"> amarillo</span>{" "}
-                indica atención,
-                <span className="text-red-400 font-semibold"> rojo</span>{" "}
-                señala prioridad o retraso.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ================= PERFIL ================= */}
         {view === "perfil" && (
           <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-5">
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-6 shadow-[0_0_28px_rgba(255,0,0,0.08)]">
+            <div className="rounded-[32px] border border-white/10 bg-white/[0.05] backdrop-blur-xl p-6 shadow-[0_0_30px_rgba(34,211,238,0.06)]">
               <div className="flex flex-col items-center text-center">
-                <div className="rounded-2xl border border-red-500/20 bg-black/30 p-3">
-                  <img
-                    src={logoJaha}
-                    alt="JAHA"
-                    className="w-24 h-24 object-contain"
-                  />
+                <div className="rounded-[24px] border border-white/10 bg-[#08141d]/90 p-3">
+                  <img src={logoJaha} alt="JAHA" className="w-24 h-24 object-contain" />
                 </div>
 
-                <h2 className="mt-4 text-xl font-extrabold tracking-[0.08em]">
-                  Perfil Ciudadano
+                <h2 className="mt-4 text-xl font-black tracking-[0.04em]">
+                  {currentUserName}
                 </h2>
-                <p className="mt-2 text-sm text-white/55">
-                  Acceso simple a información pública y monitoreo territorial.
-                </p>
+                <p className="mt-2 text-sm text-white/55">{currentUserEmail}</p>
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-6 shadow-[0_0_28px_rgba(255,0,0,0.08)]">
-              <h3 className="text-lg font-extrabold text-white">
-                Sobre la plataforma
-              </h3>
+            <div className="rounded-[32px] border border-white/10 bg-white/[0.05] backdrop-blur-xl p-6 shadow-[0_0_30px_rgba(34,211,238,0.06)]">
+              <h3 className="text-lg font-black text-white">Sobre la plataforma</h3>
 
-              <p className="mt-3 text-white/65 leading-relaxed">
-                JAHA 2041 es una plataforma orientada al seguimiento del Plan de
-                Desarrollo Sostenible de Minga Guazú, con foco en transparencia,
-                participación y lectura territorial.
+              <p className="mt-3 text-white/68 leading-relaxed">
+                JAHA 2041 combina mapa, participación ciudadana y seguimiento municipal
+                para convertir reclamos en visibilidad pública y acción real.
               </p>
 
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -817,11 +1368,13 @@ export default function App() {
                   "Acceso a información pública",
                   "Monitoreo de proyectos y obras",
                   "Participación activa ciudadana",
-                  "Modo simple y fácil de usar",
+                  "Seguimiento por estado",
+                  "Barrios más participativos",
+                  "Sesión segura con Supabase",
                 ].map((item) => (
                   <div
                     key={item}
-                    className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-white/75"
+                    className="rounded-[22px] border border-white/10 bg-[#08141d]/90 p-4 text-sm text-white/78"
                   >
                     {item}
                   </div>
@@ -831,6 +1384,157 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[32px] border border-white/10 bg-[#07141d] shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#07141d]/95 px-5 py-4 backdrop-blur">
+              <div>
+                <h3 className="text-lg sm:text-xl font-black text-white">
+                  Nueva denuncia ciudadana
+                </h3>
+                <p className="mt-1 text-sm text-white/50">
+                  {pickingOnMap
+                    ? "Ubicación tomada desde el mapa automáticamente."
+                    : "Contá qué está pasando en tu barrio."}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setReportModalOpen(false);
+                  setPickingOnMap(false);
+                }}
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-white text-xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 pt-5">
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(CATEGORY_META).map(([key, meta]) => (
+                  <CategoryPill
+                    key={key}
+                    active={reportForm.category === key}
+                    icon={meta.icon}
+                    label={meta.label}
+                    onClick={() => handleReportField("category", key)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateReport} className="space-y-4 px-5 py-5">
+              <div>
+                <label className="mb-2 block text-sm text-white/75">Barrio</label>
+                <input
+                  type="text"
+                  value={reportForm.barrio}
+                  onChange={(e) => handleReportField("barrio", e.target.value)}
+                  placeholder="Ej: Santa Mónica"
+                  className="w-full rounded-2xl border border-white/10 bg-[#041018] px-4 py-3 text-white outline-none placeholder:text-white/30"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm text-white/75">
+                  Título corto
+                </label>
+                <input
+                  type="text"
+                  value={reportForm.title}
+                  onChange={(e) => handleReportField("title", e.target.value)}
+                  placeholder="Ej: En mi barrio no tenemos luz"
+                  className="w-full rounded-2xl border border-white/10 bg-[#041018] px-4 py-3 text-white outline-none placeholder:text-white/30"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm text-white/75">
+                  Descripción
+                </label>
+                <textarea
+                  rows={5}
+                  value={reportForm.description}
+                  onChange={(e) => handleReportField("description", e.target.value)}
+                  placeholder="Contá qué pasa, desde cuándo y cómo afecta al barrio."
+                  className="w-full rounded-2xl border border-white/10 bg-[#041018] px-4 py-3 text-white outline-none placeholder:text-white/30 resize-none"
+                />
+              </div>
+
+              <label className="flex items-center gap-3 rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reportForm.urgent}
+                  onChange={(e) => handleReportField("urgent", e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <div>
+                  <p className="text-sm font-bold text-white">¿Es urgente?</p>
+                  <p className="text-xs text-white/55">
+                    Marcá esto si requiere prioridad municipal.
+                  </p>
+                </div>
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-2 block text-sm text-white/75">
+                    Latitud
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={reportForm.lat}
+                    onChange={(e) => handleReportField("lat", e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-[#041018] px-4 py-3 text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-white/75">
+                    Longitud
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={reportForm.lng}
+                    onChange={(e) => handleReportField("lng", e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-[#041018] px-4 py-3 text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-[22px] border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-sm text-white/75">
+                Tocá el mapa y la ubicación se carga sola. También podés editar las coordenadas manualmente.
+              </div>
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportModalOpen(false);
+                    setPickingOnMap(false);
+                  }}
+                  className="rounded-2xl border border-white/10 bg-white/[0.05] px-5 py-3 font-semibold text-white"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={reportSaving}
+                  className="rounded-2xl bg-gradient-to-r from-teal-400 to-cyan-400 px-5 py-3 font-black text-slate-950 shadow-[0_0_24px_rgba(45,212,191,0.22)] transition disabled:opacity-60"
+                >
+                  {reportSaving ? "Enviando denuncia..." : "Enviar denuncia"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
