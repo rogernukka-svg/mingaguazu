@@ -10,8 +10,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Cliente Supabase
+// Cliente Supabase (FIX LOGIN + SESIÓN)
 const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,          // 🔥 GUARDA sesión
+    autoRefreshToken: true,        // 🔥 renueva token automáticamente
+    detectSessionInUrl: true,      // 🔥 necesario para login correcto
+  },
   realtime: {
     params: {
       eventsPerSecond: 10,

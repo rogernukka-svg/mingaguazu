@@ -102,36 +102,42 @@ export default function Jaha2045({ onLogin = () => {} }) {
     };
   }, [bootLines]);
 
-  useEffect(() => {
-    let mounted = true;
+ useEffect(() => {
+  let mounted = true;
 
-    const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
+  const checkSession = async () => {
+    const { data, error } = await supabase.auth.getSession();
 
-      if (!mounted) return;
+    console.log("Jaha2045 getSession:", { data, error });
 
-      if (data?.session?.user) {
-        onLogin(data.session.user);
-        navigate("/app", { replace: true });
-      }
-    };
+    if (!mounted) return;
 
-    checkSession();
+    if (data?.session?.user) {
+      onLogin(data.session.user);
+      navigate("/app", { replace: true });
+    }
+  };
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        onLogin(session.user);
-        navigate("/app", { replace: true });
-      }
-    });
+  checkSession();
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [navigate, onLogin]);
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((event, session) => {
+    console.log("Jaha2045 onAuthStateChange:", event, session);
+
+    if (!mounted) return;
+
+    if (session?.user) {
+      onLogin(session.user);
+      navigate("/app", { replace: true });
+    }
+  });
+
+  return () => {
+    mounted = false;
+    subscription.unsubscribe();
+  };
+}, [navigate, onLogin]);
 
   const handleChange = (field, value) => {
     if (field === "email") {
@@ -146,107 +152,122 @@ export default function Jaha2045({ onLogin = () => {} }) {
 
   const resetPasswordVisibility = () => setShowPassword(false);
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
+ const handleRegister = async (e) => {
+  e.preventDefault();
 
-    if (
-      !formUser.nombre.trim() ||
-      !formUser.apellido.trim() ||
-      !formUser.email.trim() ||
-      !formUser.password.trim()
-    ) {
-      alert("Completá todos los campos");
-      return;
-    }
+  if (
+    !formUser.nombre.trim() ||
+    !formUser.apellido.trim() ||
+    !formUser.email.trim() ||
+    !formUser.password.trim()
+  ) {
+    alert("Completá todos los campos");
+    return;
+  }
 
-    if (formUser.password.trim().length < 6) {
-      alert("La contraseña debe tener al menos 6 caracteres");
-      return;
-    }
+  if (formUser.password.trim().length < 6) {
+    alert("La contraseña debe tener al menos 6 caracteres");
+    return;
+  }
 
-    setAuthLoading(true);
+  setAuthLoading(true);
 
-    try {
-      const cleanNombre = formUser.nombre.trim();
-      const cleanApellido = formUser.apellido.trim();
-      const cleanEmail = formUser.email.trim().toLowerCase();
-      const cleanPassword = formUser.password.trim();
+  try {
+    const cleanNombre = formUser.nombre.trim();
+    const cleanApellido = formUser.apellido.trim();
+    const cleanEmail = formUser.email.trim().toLowerCase();
+    const cleanPassword = formUser.password.trim();
 
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: cleanPassword,
-        options: {
-          data: {
-            name: cleanNombre,
-            apellido: cleanApellido,
-            full_name: `${cleanNombre} ${cleanApellido}`.trim(),
-            role: "normal",
-          },
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: cleanPassword,
+      options: {
+        data: {
+          name: cleanNombre,
+          apellido: cleanApellido,
+          full_name: `${cleanNombre} ${cleanApellido}`.trim(),
+          role: "normal",
         },
-      });
+      },
+    });
 
-      console.log("REGISTER DATA:", data);
-      console.log("REGISTER ERROR:", error);
+    console.log("REGISTER DATA:", data);
+    console.log("REGISTER ERROR:", error);
 
-      if (error) {
-        alert(error.message || "No se pudo crear la cuenta");
-        return;
-      }
+    if (error) {
+      alert(error.message || "No se pudo crear la cuenta");
+      return;
+    }
 
-      const { error: loginError } = await supabase.auth.signInWithPassword({
+    const hasSession = !!data?.session?.user;
+
+    if (hasSession) {
+  onLogin(data.session.user);
+  return;
+}
+
+    const { data: loginData, error: loginError } =
+      await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: cleanPassword,
       });
 
-      if (loginError) {
-        alert(loginError.message || "Cuenta creada, pero no se pudo iniciar sesión");
-        return;
-      }
+    console.log("REGISTER LOGIN DATA:", loginData);
+    console.log("REGISTER LOGIN ERROR:", loginError);
 
-      navigate("/app", { replace: true });
-    } catch (err) {
-      console.error("REGISTER CATCH:", err);
-      alert("No se pudo crear la cuenta");
-    } finally {
-      setAuthLoading(false);
+    if (loginError) {
+      alert(loginError.message || "Cuenta creada, pero no se pudo iniciar sesión");
+      return;
     }
-  };
+
+    if (loginData?.user) {
+  onLogin(loginData.user);
+}
+  } catch (err) {
+    console.error("REGISTER CATCH:", err);
+    alert("No se pudo crear la cuenta");
+  } finally {
+    setAuthLoading(false);
+  }
+};
 
   const handleLogin = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    if (!formUser.email.trim() || !formUser.password.trim()) {
-      alert("Completá correo y contraseña");
+  if (!formUser.email.trim() || !formUser.password.trim()) {
+    alert("Completá correo y contraseña");
+    return;
+  }
+
+  setAuthLoading(true);
+
+  try {
+    const cleanEmail = formUser.email.trim().toLowerCase();
+    const cleanPassword = formUser.password.trim();
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: cleanPassword,
+    });
+
+    console.log("LOGIN DATA:", data);
+    console.log("LOGIN ERROR:", error);
+
+    if (error) {
+      alert("Correo o contraseña incorrectos");
       return;
     }
 
-    setAuthLoading(true);
-
-    try {
-      const cleanEmail = formUser.email.trim().toLowerCase();
-      const cleanPassword = formUser.password.trim();
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: cleanPassword,
-      });
-
-      console.log("LOGIN DATA:", data);
-      console.log("LOGIN ERROR:", error);
-
-      if (error) {
-        alert("Correo o contraseña incorrectos");
-        return;
-      }
-
-      navigate("/app", { replace: true });
-    } catch (err) {
-      console.error("LOGIN CATCH:", err);
-      alert("Error al iniciar sesión");
-    } finally {
-      setAuthLoading(false);
-    }
-  };
+    if (data?.user) {
+  onLogin(data.user);
+}
+  } catch (err) {
+    console.error("LOGIN CATCH:", err);
+    alert("Error al iniciar sesión");
+  } finally {
+    setAuthLoading(false);
+  }
+};
 
   if (loading) {
     return (

@@ -11,7 +11,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import logoJaha from "./assets/logojahabicolor.png";
-import supabase from "./supabaseClient";
+import supabase from "./lib/supabase.js";
 
 /* =====================================================
    CENTRO REAL – MINGA GUAZÚ
@@ -454,31 +454,37 @@ export default function App() {
   });
 
   useEffect(() => {
-    let mounted = true;
+  let mounted = true;
 
-    const loadSession = async () => {
-      const { data } = await supabase.auth.getSession();
+  const loadSession = async () => {
+    const { data, error } = await supabase.auth.getSession();
 
-      if (!mounted) return;
+    console.log("APP getSession:", { data, error });
 
-      setSession(data.session ?? null);
-      setAuthLoading(false);
-    };
+    if (!mounted) return;
 
-    loadSession();
+    setSession(data?.session ?? null);
+    setAuthLoading(false);
+  };
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession ?? null);
-      setAuthLoading(false);
-    });
+  loadSession();
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((event, newSession) => {
+    console.log("APP onAuthStateChange:", event, newSession);
+
+    if (!mounted) return;
+
+    setSession(newSession ?? null);
+    setAuthLoading(false);
+  });
+
+  return () => {
+    mounted = false;
+    subscription.unsubscribe();
+  };
+}, []);
 
   useEffect(() => {
     if (!session?.user) return;
