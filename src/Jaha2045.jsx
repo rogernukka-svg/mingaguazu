@@ -102,33 +102,49 @@ export default function Jaha2045({ onLogin = () => {} }) {
     };
   }, [bootLines]);
 
- useEffect(() => {
+useEffect(() => {
   let mounted = true;
 
-  const checkSession = async () => {
+  const syncSession = async () => {
     const { data, error } = await supabase.auth.getSession();
 
     console.log("Jaha2045 getSession:", { data, error });
 
     if (!mounted) return;
 
-    if (data?.session?.user) {
-      onLogin(data.session.user);
+    const session = data?.session ?? null;
+
+    if (session?.user) {
+      onLogin(session.user);
       navigate("/app", { replace: true });
     }
   };
 
-  checkSession();
+  syncSession();
 
   const {
     data: { subscription },
-  } = supabase.auth.onAuthStateChange((event, session) => {
+  } = supabase.auth.onAuthStateChange(async (event, session) => {
     console.log("Jaha2045 onAuthStateChange:", event, session);
 
     if (!mounted) return;
 
     if (session?.user) {
       onLogin(session.user);
+      navigate("/app", { replace: true });
+      return;
+    }
+
+    if (event === "SIGNED_OUT") {
+      return;
+    }
+
+    const { data } = await supabase.auth.getSession();
+
+    if (!mounted) return;
+
+    if (data?.session?.user) {
+      onLogin(data.session.user);
       navigate("/app", { replace: true });
     }
   });
@@ -145,9 +161,9 @@ export default function Jaha2045({ onLogin = () => {} }) {
     }
 
     setFormUser((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+  ...prev,
+  [field]: value,
+}));
   };
 
   const resetPasswordVisibility = () => setShowPassword(false);
@@ -199,12 +215,11 @@ export default function Jaha2045({ onLogin = () => {} }) {
       return;
     }
 
-    const hasSession = !!data?.session?.user;
-
-    if (hasSession) {
-  onLogin(data.session.user);
-  return;
-}
+    if (data?.session?.user) {
+      onLogin(data.session.user);
+      navigate("/app", { replace: true });
+      return;
+    }
 
     const { data: loginData, error: loginError } =
       await supabase.auth.signInWithPassword({
@@ -216,13 +231,23 @@ export default function Jaha2045({ onLogin = () => {} }) {
     console.log("REGISTER LOGIN ERROR:", loginError);
 
     if (loginError) {
-      alert(loginError.message || "Cuenta creada, pero no se pudo iniciar sesión");
+      alert(
+        loginError.message || "Cuenta creada, pero no se pudo iniciar sesión"
+      );
       return;
     }
 
     if (loginData?.user) {
-  onLogin(loginData.user);
-}
+      onLogin(loginData.user);
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log("REGISTER SESSION AFTER LOGIN:", sessionData);
+
+      navigate("/app", { replace: true });
+      return;
+    }
+
+    alert("Cuenta creada, pero no se pudo recuperar la sesión.");
   } catch (err) {
     console.error("REGISTER CATCH:", err);
     alert("No se pudo crear la cuenta");
@@ -231,7 +256,7 @@ export default function Jaha2045({ onLogin = () => {} }) {
   }
 };
 
-  const handleLogin = async (e) => {
+ const handleLogin = async (e) => {
   e.preventDefault();
 
   if (!formUser.email.trim() || !formUser.password.trim()) {
@@ -259,8 +284,18 @@ export default function Jaha2045({ onLogin = () => {} }) {
     }
 
     if (data?.user) {
-  onLogin(data.user);
-}
+      onLogin(data.user);
+
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+
+      console.log("LOGIN SESSION CHECK:", sessionData, sessionError);
+
+      navigate("/app", { replace: true });
+      return;
+    }
+
+    alert("No se pudo recuperar la sesión.");
   } catch (err) {
     console.error("LOGIN CATCH:", err);
     alert("Error al iniciar sesión");
@@ -508,24 +543,26 @@ export default function Jaha2045({ onLogin = () => {} }) {
                 )}
 
                 <div className={mode === "register" ? "mt-3" : ""}>
-                  <Field
-                    label="Correo Gmail"
-                    placeholder="tucorreo@gmail.com"
-                    type="email"
-                    value={formUser.email}
-                    onChange={(e) => handleChange("email", e.target.value)}
-                  />
-                </div>
+  <Field
+    label="Correo Gmail"
+    placeholder="tucorreo@gmail.com"
+    type="email"
+    autoComplete={mode === "login" ? "email" : "username"}
+    value={formUser.email}
+    onChange={(e) => handleChange("email", e.target.value)}
+  />
+</div>
 
-                <div className="mt-3">
-                  <Field
-                    label="Contraseña"
-                    placeholder="Ingresá tu contraseña"
-                    type={showPassword ? "text" : "password"}
-                    value={formUser.password}
-                    onChange={(e) => handleChange("password", e.target.value)}
-                  />
-                </div>
+<div className="mt-3">
+  <Field
+    label="Contraseña"
+    placeholder="Ingresá tu contraseña"
+    type={showPassword ? "text" : "password"}
+    autoComplete={mode === "login" ? "current-password" : "new-password"}
+    value={formUser.password}
+    onChange={(e) => handleChange("password", e.target.value)}
+  />
+</div>
 
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <p className="text-xs text-white/45">
@@ -635,6 +672,7 @@ function Field({
   onChange,
   type = "text",
   inputMode,
+  autoComplete,
 }) {
   return (
     <div>
@@ -649,11 +687,12 @@ function Field({
         value={value}
         onChange={onChange}
         autoComplete={
-          type === "email"
+          autoComplete ||
+          (type === "email"
             ? "email"
             : type === "password"
             ? "current-password"
-            : "off"
+            : "off")
         }
       />
     </div>
