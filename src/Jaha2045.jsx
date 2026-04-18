@@ -24,7 +24,68 @@ export default function Jaha2045({ onLogin = () => {} }) {
   });
 
   const audioRef = useRef(null);
+const syncUserProfile = async (user, fallback = {}) => {
+  if (!user?.id) {
+    return {
+      role: String(
+        fallback.role ||
+          user?.user_metadata?.role ||
+          user?.app_metadata?.role ||
+          "normal"
+      )
+        .toLowerCase()
+        .trim(),
+      profile: null,
+    };
+  }
 
+  const fallbackFullName =
+    fallback.full_name ||
+    user?.user_metadata?.full_name ||
+    [user?.user_metadata?.name, user?.user_metadata?.apellido]
+      .filter(Boolean)
+      .join(" ")
+      .trim() ||
+    user?.email?.split("@")[0] ||
+    "Usuario";
+
+  const fallbackRole = String(
+    fallback.role ||
+      user?.user_metadata?.role ||
+      user?.app_metadata?.role ||
+      "normal"
+  )
+    .toLowerCase()
+    .trim();
+
+  const payload = {
+    id: user.id,
+    email: String(user.email || "").trim().toLowerCase(),
+    full_name: fallbackFullName,
+    role: fallbackRole,
+  };
+
+  const { data, error } = await supabase
+    .from("users_profile")
+    .upsert(payload, { onConflict: "id" })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("SYNC users_profile ERROR:", error);
+    return {
+      role: fallbackRole,
+      profile: null,
+    };
+  }
+
+  return {
+    role: String(data?.role || fallbackRole || "normal")
+      .toLowerCase()
+      .trim(),
+    profile: data,
+  };
+};
   const bootLines = useMemo(
     () => [
       "INICIANDO NÚCLEO JAHA...",
@@ -105,19 +166,18 @@ export default function Jaha2045({ onLogin = () => {} }) {
 useEffect(() => {
   let mounted = true;
 
-  const goByRole = (user) => {
-  const role =
-    user?.user_metadata?.role ||
-    user?.app_metadata?.role ||
-    "normal";
+  const goByRole = async (user) => {
+    const { role } = await syncUserProfile(user);
 
-  if (role === "superadmin") {
-    navigate("/secure-auth", { replace: true });
-    return;
-  }
+    if (!mounted) return;
 
-  navigate("/app", { replace: true });
-};
+    if (role === "superadmin") {
+      navigate("/secure-auth", { replace: true });
+      return;
+    }
+
+    navigate("/app", { replace: true });
+  };
 
   const syncSession = async () => {
     const { data, error } = await supabase.auth.getSession();
@@ -130,7 +190,7 @@ useEffect(() => {
 
     if (session?.user) {
       onLogin(session.user);
-      goByRole(session.user);
+      await goByRole(session.user);
     }
   };
 
@@ -145,7 +205,7 @@ useEffect(() => {
 
     if (session?.user) {
       onLogin(session.user);
-      goByRole(session.user);
+      await goByRole(session.user);
       return;
     }
 
@@ -159,7 +219,7 @@ useEffect(() => {
 
     if (data?.session?.user) {
       onLogin(data.session.user);
-      goByRole(data.session.user);
+      await goByRole(data.session.user);
     }
   });
 
@@ -207,6 +267,7 @@ useEffect(() => {
     const cleanApellido = formUser.apellido.trim();
     const cleanEmail = formUser.email.trim().toLowerCase();
     const cleanPassword = formUser.password.trim();
+    const fullName = `${cleanNombre} ${cleanApellido}`.trim();
 
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
@@ -215,7 +276,7 @@ useEffect(() => {
         data: {
           name: cleanNombre,
           apellido: cleanApellido,
-          full_name: `${cleanNombre} ${cleanApellido}`.trim(),
+          full_name: fullName,
           role: "normal",
         },
       },
@@ -229,22 +290,22 @@ useEffect(() => {
       return;
     }
 
- if (data?.session?.user) {
-  onLogin(data.session.user);
+    if (data?.session?.user) {
+      onLogin(data.session.user);
 
-  const role =
-    data.session.user?.user_metadata?.role ||
-    data.session.user?.app_metadata?.role ||
-    "normal";
+      const { role } = await syncUserProfile(data.session.user, {
+        full_name: fullName,
+        role: "normal",
+      });
 
-  if (role === "superadmin") {
-    navigate("/secure-auth", { replace: true });
-    return;
-  }
+      if (role === "superadmin") {
+        navigate("/secure-auth", { replace: true });
+        return;
+      }
 
-  navigate("/app", { replace: true });
-  return;
-}
+      navigate("/app", { replace: true });
+      return;
+    }
 
     const { data: loginData, error: loginError } =
       await supabase.auth.signInWithPassword({
@@ -263,24 +324,21 @@ useEffect(() => {
     }
 
     if (loginData?.user) {
-  onLogin(loginData.user);
+      onLogin(loginData.user);
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  console.log("REGISTER SESSION AFTER LOGIN:", sessionData);
+      const { role } = await syncUserProfile(loginData.user, {
+        full_name: fullName,
+        role: "normal",
+      });
 
-  const role =
-    loginData.user?.user_metadata?.role ||
-    loginData.user?.app_metadata?.role ||
-    "normal";
+      if (role === "superadmin") {
+        navigate("/secure-auth", { replace: true });
+        return;
+      }
 
-  if (role === "superadmin") {
-    navigate("/secure-auth", { replace: true });
-    return;
-  }
-
-  navigate("/app", { replace: true });
-  return;
-}
+      navigate("/app", { replace: true });
+      return;
+    }
 
     alert("Cuenta creada, pero no se pudo recuperar la sesión.");
   } catch (err) {
@@ -319,26 +377,23 @@ useEffect(() => {
     }
 
     if (data?.user) {
-  onLogin(data.user);
+      onLogin(data.user);
 
-  const { data: sessionData, error: sessionError } =
-    await supabase.auth.getSession();
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
 
-  console.log("LOGIN SESSION CHECK:", sessionData, sessionError);
+      console.log("LOGIN SESSION CHECK:", sessionData, sessionError);
 
-  const role =
-    data.user?.user_metadata?.role ||
-    data.user?.app_metadata?.role ||
-    "normal";
+      const { role } = await syncUserProfile(data.user);
 
-  if (role === "superadmin") {
-    navigate("/secure-auth", { replace: true });
-    return;
-  }
+      if (role === "superadmin") {
+        navigate("/secure-auth", { replace: true });
+        return;
+      }
 
-  navigate("/app", { replace: true });
-  return;
-}
+      navigate("/app", { replace: true });
+      return;
+    }
 
     alert("No se pudo recuperar la sesión.");
   } catch (err) {

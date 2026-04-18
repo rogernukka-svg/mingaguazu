@@ -264,10 +264,11 @@ export default function SuperAdmin() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  const [reports, setReports] = useState([]);
-  const [reportsLoading, setReportsLoading] = useState(true);
-  const [projects, setProjects] = useState(PROJECTS_FALLBACK);
-  const [transparency, setTransparency] = useState(TRANSPARENCY_FALLBACK);
+ const [reports, setReports] = useState([]);
+const [reportsLoading, setReportsLoading] = useState(true);
+const [projects, setProjects] = useState(PROJECTS_FALLBACK);
+const [transparency, setTransparency] = useState(TRANSPARENCY_FALLBACK);
+const [users, setUsers] = useState([]);
 
   const [tab, setTab] = useState("dashboard");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -301,17 +302,12 @@ export default function SuperAdmin() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!session?.user) return;
-    loadAll();
-  }, [session]);
-  // 🔹 Carga inicial cuando hay sesión
-useEffect(() => {
+ useEffect(() => {
   if (!session?.user) return;
   loadAll();
 }, [session]);
 
-// 🔥 REALTIME (AQUÍ VA)
+// 🔥 REALTIME 
 useEffect(() => {
   if (!session?.user) return;
 
@@ -334,54 +330,77 @@ useEffect(() => {
     supabase.removeChannel(channel);
   };
 }, [session]);
+const loadAll = async () => {
+  setReportsLoading(true);
 
-  const loadAll = async () => {
-    setReportsLoading(true);
+  try {
+    const reportsPromise = supabase
+      .from("citizen_reports")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    try {
-      const reportsPromise = supabase
-        .from("citizen_reports")
-        .select("*")
-        .order("created_at", { ascending: false });
+   const projectsPromise = supabase
+  .from("jaha_projects")
+  .select("*")
+  .order("progress", { ascending: false });
 
-      const projectsPromise = supabase
-        .from("municipal_projects")
-        .select("*")
-        .order("progress", { ascending: false });
+const transparencyPromise = Promise.resolve({
+  data: [],
+  error: null,
+});
 
-      const transparencyPromise = supabase
-        .from("transparency_entries")
-        .select("*")
-        .order("created_at", { ascending: false });
+    const usersPromise = supabase
+      .from("users_profile")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-      const [reportsRes, projectsRes, transparencyRes] = await Promise.allSettled([
+    const [reportsRes, projectsRes, transparencyRes, usersRes] =
+      await Promise.allSettled([
         reportsPromise,
         projectsPromise,
         transparencyPromise,
+        usersPromise,
       ]);
 
-      if (reportsRes.status === "fulfilled" && !reportsRes.value.error) {
-        setReports(reportsRes.value.data || []);
-      }
-
-      if (projectsRes.status === "fulfilled" && !projectsRes.value.error) {
-        const data = projectsRes.value.data || [];
-        if (data.length) setProjects(data);
-      }
-
-      if (
-        transparencyRes.status === "fulfilled" &&
-        !transparencyRes.value.error
-      ) {
-        const data = transparencyRes.value.data || [];
-        if (data.length) setTransparency(data);
-      }
-    } catch (error) {
-      console.error("SUPER ADMIN LOAD ERROR:", error);
-    } finally {
-      setReportsLoading(false);
+    if (reportsRes.status === "fulfilled" && !reportsRes.value.error) {
+      setReports(reportsRes.value.data || []);
     }
-  };
+
+    if (projectsRes.status === "fulfilled" && !projectsRes.value.error) {
+      const data = projectsRes.value.data || [];
+      if (data.length) setProjects(data);
+    }
+
+    if (
+      transparencyRes.status === "fulfilled" &&
+      !transparencyRes.value.error
+    ) {
+      const data = transparencyRes.value.data || [];
+      if (data.length) setTransparency(data);
+    }
+
+   if (usersRes.status === "fulfilled") {
+  console.log("USERS PROFILE RESULT:", usersRes.value);
+
+  if (usersRes.value.error) {
+    console.error("USERS PROFILE ERROR:", usersRes.value.error);
+    setUsers([]);
+  } else {
+    const safeUsers = Array.isArray(usersRes.value.data)
+      ? usersRes.value.data
+      : [];
+    setUsers(safeUsers);
+  }
+} else {
+  console.error("USERS PROFILE PROMISE ERROR:", usersRes.reason);
+  setUsers([]);
+}
+  } catch (error) {
+    console.error("SUPER ADMIN LOAD ERROR:", error);
+  } finally {
+    setReportsLoading(false);
+  }
+};
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -461,13 +480,18 @@ useEffect(() => {
   }, [enrichedReports]);
 
   const avgProjectProgress = useMemo(() => {
-    if (!projects.length) return 0;
-    const total = projects.reduce(
-      (acc, item) => acc + (Number(item.progress) || 0),
-      0
-    );
-    return Math.round(total / projects.length);
-  }, [projects]);
+  if (!projects.length) return 0;
+  const total = projects.reduce(
+    (acc, item) => acc + (Number(item.progress) || 0),
+    0
+  );
+  return Math.round(total / projects.length);
+}, [projects]);
+
+const totalUsers = users.length;
+const superAdminsCount = users.filter(
+  (item) => String(item.role || "").toLowerCase().trim() === "superadmin"
+).length;
 
   const handleChangeReportStatus = async (report, nextStatus) => {
     if (!report?.id) return;
@@ -561,21 +585,48 @@ useEffect(() => {
   }
 
   const currentUser = session?.user ?? null;
-  const currentUserName =
-    currentUser?.user_metadata?.full_name ||
-    currentUser?.user_metadata?.name ||
-    currentUser?.email?.split("@")[0] ||
-    "Administrador";
 
-  const role =
+const matchedProfile =
+  users.find(
+    (item) => String(item.id || "").trim() === String(currentUser?.id || "").trim()
+  ) ||
+  users.find(
+    (item) =>
+      String(item.email || "").trim().toLowerCase() ===
+      String(currentUser?.email || "").trim().toLowerCase()
+  ) ||
+  null;
+
+const currentUserName =
+  matchedProfile?.full_name ||
+  currentUser?.user_metadata?.full_name ||
+  currentUser?.user_metadata?.name ||
+  currentUser?.email?.split("@")[0] ||
+  "Administrador";
+
+const role =
+  matchedProfile?.role ||
   currentUser?.user_metadata?.role ||
   currentUser?.app_metadata?.role ||
   "normal";
 
-// 🔥 NORMALIZACIÓN DE ROLE
 const normalizedRole = String(role || "").toLowerCase().trim();
 
-// 🔐 VALIDACIÓN REAL
+/*
+  IMPORTANTE:
+  Esperamos a que termine la carga inicial de users_profile
+  antes de decidir si redirigir o no.
+*/
+if (reportsLoading) {
+  return (
+    <div className="min-h-screen bg-[#041018] text-white flex items-center justify-center">
+      <div className="rounded-[28px] border border-white/10 bg-white/[0.05] px-6 py-4 backdrop-blur-xl">
+        Verificando acceso ejecutivo...
+      </div>
+    </div>
+  );
+}
+
 if (!["superadmin"].includes(normalizedRole)) {
   return <Navigate to="/app" replace />;
 }
@@ -643,11 +694,12 @@ if (!["superadmin"].includes(normalizedRole)) {
 
               <div className="flex flex-wrap gap-3">
                 {[
-                  ["dashboard", "Dashboard"],
-                  ["denuncias", "Denuncias"],
-                  ["proyectos", "Proyectos"],
-                  ["transparencia", "Transparencia"],
-                ].map(([key, label]) => (
+  ["dashboard", "Dashboard"],
+  ["denuncias", "Denuncias"],
+  ["proyectos", "Proyectos"],
+  ["transparencia", "Transparencia"],
+  ["usuarios", "Usuarios"],
+].map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
@@ -668,40 +720,46 @@ if (!["superadmin"].includes(normalizedRole)) {
         </div>
       </header>
 
-      <section className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 pt-5 pb-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-          <StatCard
-            title="Total denuncias"
-            value={totalReports}
-            subtitle="Lectura general del municipio."
-            tone="cyan"
-          />
-          <StatCard
-            title="Urgentes"
-            value={urgentCount}
-            subtitle="Casos con prioridad alta."
-            tone="red"
-          />
-          <StatCard
-            title="En proceso"
-            value={processCount}
-            subtitle="Casos ya en gestión."
-            tone="amber"
-          />
-          <StatCard
-            title="Resueltas"
-            value={solvedCount}
-            subtitle="Casos cerrados y visibles."
-            tone="green"
-          />
-          <StatCard
-            title="Avance proyectos"
-            value={`${avgProjectProgress}%`}
-            subtitle="Promedio ejecutivo actual."
-            tone="violet"
-          />
-        </div>
-      </section>
+     <section className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 pt-5 pb-3">
+  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+    <StatCard
+      title="Total denuncias"
+      value={totalReports}
+      subtitle="Lectura general del municipio."
+      tone="cyan"
+    />
+    <StatCard
+      title="Urgentes"
+      value={urgentCount}
+      subtitle="Casos con prioridad alta."
+      tone="red"
+    />
+    <StatCard
+      title="En proceso"
+      value={processCount}
+      subtitle="Casos ya en gestión."
+      tone="amber"
+    />
+    <StatCard
+      title="Resueltas"
+      value={solvedCount}
+      subtitle="Casos cerrados y visibles."
+      tone="green"
+    />
+    <StatCard
+      title="Usuarios"
+      value={totalUsers}
+      subtitle="Usuarios registrados en la plataforma."
+      tone="cyan"
+    />
+    <StatCard
+      title="Super admins"
+      value={superAdminsCount}
+      subtitle="Usuarios con acceso ejecutivo."
+      tone="violet"
+    />
+  </div>
+</section>
 
       <main className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 pb-8">
         {tab === "dashboard" && (
@@ -1291,6 +1349,79 @@ if (!["superadmin"].includes(normalizedRole)) {
               </div>
             </ShellCard>
           </div>
+        )}
+                {tab === "usuarios" && (
+          <ShellCard>
+            <SectionHeader
+              title="Usuarios registrados"
+              subtitle="Vista rápida de ciudadanos y roles del sistema."
+              right={
+                <button
+                  type="button"
+                  onClick={loadAll}
+                  className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2.5 text-sm font-bold text-white hover:bg-white/[0.08]"
+                >
+                  Recargar
+                </button>
+              }
+            />
+
+            <div className="p-5">
+              <div className="grid grid-cols-1 gap-3">
+                {users.length ? (
+                  users.map((item) => {
+                    const itemRole = String(item.role || "normal")
+                      .toLowerCase()
+                      .trim();
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-[24px] border border-white/10 bg-[#08141d] p-4"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-lg font-black text-white truncate">
+                              {item.full_name || "Sin nombre"}
+                            </p>
+                            <p className="mt-1 text-sm text-white/50 truncate">
+                              {item.email || "Sin correo"}
+                            </p>
+                            <p className="mt-2 text-xs uppercase tracking-[0.14em] text-white/35">
+                              ID: {item.id}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={[
+                                "rounded-full px-3 py-1 text-[11px] font-bold",
+                                itemRole === "superadmin"
+                                  ? "bg-cyan-400/10 text-cyan-300"
+                                  : "bg-white/[0.06] text-white/70",
+                              ].join(" ")}
+                            >
+                              {itemRole}
+                            </span>
+
+                            <span className="rounded-full bg-white/[0.06] px-3 py-1 text-[11px] font-bold text-white/70">
+                              {item.created_at
+                                ? new Date(item.created_at).toLocaleString("es-PY")
+                                : "Sin fecha"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-[24px] border border-white/10 bg-[#08141d] p-5 text-white/55">
+                    Todavía no hay usuarios cargados en users_profile.
+                  </div>
+                )}
+              </div>
+            </div>
+          </ShellCard>
         )}
       </main>
     </div>
