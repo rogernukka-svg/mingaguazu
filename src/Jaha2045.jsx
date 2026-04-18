@@ -105,6 +105,20 @@ export default function Jaha2045({ onLogin = () => {} }) {
 useEffect(() => {
   let mounted = true;
 
+  const goByRole = (user) => {
+  const role =
+    user?.user_metadata?.role ||
+    user?.app_metadata?.role ||
+    "normal";
+
+  if (role === "superadmin") {
+    navigate("/secure-auth", { replace: true });
+    return;
+  }
+
+  navigate("/app", { replace: true });
+};
+
   const syncSession = async () => {
     const { data, error } = await supabase.auth.getSession();
 
@@ -116,7 +130,7 @@ useEffect(() => {
 
     if (session?.user) {
       onLogin(session.user);
-      navigate("/app", { replace: true });
+      goByRole(session.user);
     }
   };
 
@@ -131,7 +145,7 @@ useEffect(() => {
 
     if (session?.user) {
       onLogin(session.user);
-      navigate("/app", { replace: true });
+      goByRole(session.user);
       return;
     }
 
@@ -145,7 +159,7 @@ useEffect(() => {
 
     if (data?.session?.user) {
       onLogin(data.session.user);
-      navigate("/app", { replace: true });
+      goByRole(data.session.user);
     }
   });
 
@@ -215,11 +229,22 @@ useEffect(() => {
       return;
     }
 
-    if (data?.session?.user) {
-      onLogin(data.session.user);
-      navigate("/app", { replace: true });
-      return;
-    }
+ if (data?.session?.user) {
+  onLogin(data.session.user);
+
+  const role =
+    data.session.user?.user_metadata?.role ||
+    data.session.user?.app_metadata?.role ||
+    "normal";
+
+  if (role === "superadmin") {
+    navigate("/secure-auth", { replace: true });
+    return;
+  }
+
+  navigate("/app", { replace: true });
+  return;
+}
 
     const { data: loginData, error: loginError } =
       await supabase.auth.signInWithPassword({
@@ -238,14 +263,24 @@ useEffect(() => {
     }
 
     if (loginData?.user) {
-      onLogin(loginData.user);
+  onLogin(loginData.user);
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      console.log("REGISTER SESSION AFTER LOGIN:", sessionData);
+  const { data: sessionData } = await supabase.auth.getSession();
+  console.log("REGISTER SESSION AFTER LOGIN:", sessionData);
 
-      navigate("/app", { replace: true });
-      return;
-    }
+  const role =
+    loginData.user?.user_metadata?.role ||
+    loginData.user?.app_metadata?.role ||
+    "normal";
+
+  if (role === "superadmin") {
+    navigate("/secure-auth", { replace: true });
+    return;
+  }
+
+  navigate("/app", { replace: true });
+  return;
+}
 
     alert("Cuenta creada, pero no se pudo recuperar la sesión.");
   } catch (err) {
@@ -284,16 +319,26 @@ useEffect(() => {
     }
 
     if (data?.user) {
-      onLogin(data.user);
+  onLogin(data.user);
 
-      const { data: sessionData, error: sessionError } =
-        await supabase.auth.getSession();
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession();
 
-      console.log("LOGIN SESSION CHECK:", sessionData, sessionError);
+  console.log("LOGIN SESSION CHECK:", sessionData, sessionError);
 
-      navigate("/app", { replace: true });
-      return;
-    }
+  const role =
+    data.user?.user_metadata?.role ||
+    data.user?.app_metadata?.role ||
+    "normal";
+
+  if (role === "superadmin") {
+    navigate("/secure-auth", { replace: true });
+    return;
+  }
+
+  navigate("/app", { replace: true });
+  return;
+}
 
     alert("No se pudo recuperar la sesión.");
   } catch (err) {

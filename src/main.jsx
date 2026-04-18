@@ -4,7 +4,8 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import Jaha2045 from "./Jaha2045.jsx";
 import App from "./App.jsx";
-
+import SuperAdmin from "./pages/SuperAdmin"; // 👈 AGREGADO
+import SecureAuth from "./pages/SecureAuth";
 // ================= PRIVADAS =================
 import CentralLogin from "./pages/CentralLogin.jsx";
 import CentralDashboard from "./pages/CentralDashboard.jsx";
@@ -65,10 +66,22 @@ function Main() {
         {/* ================= PÚBLICO ================= */}
         <Route path="/" element={<Jaha2045 onLogin={setUser} />} />
         <Route path="/login" element={<Jaha2045 onLogin={setUser} />} />
+
         <Route
-          path="/app"
-          element={<App initialUser={user} onLogout={() => setUser(null)} />}
-        />
+  path="/app"
+  element={
+    user?.user_metadata?.role === "superadmin" ||
+    user?.app_metadata?.role === "superadmin" ? (
+      <SecureAuth />
+    ) : (
+      <App initialUser={user} onLogout={() => setUser(null)} />
+    )
+  }
+/>
+
+        {/* 🔥 NUEVA RUTA SUPER ADMIN */}
+        <Route path="/super-admin" element={<SuperAdmin />} />
+        <Route path="/secure-auth" element={<SecureAuth />} />
 
         {/* ================= LOGIN PRIVADO ================= */}
         <Route path="/central-login" element={<CentralLogin />} />
@@ -85,6 +98,7 @@ function Main() {
             </PrivateGuard>
           }
         />
+
         <Route
           path="/central/coordinadores"
           element={
@@ -93,6 +107,7 @@ function Main() {
             </PrivateGuard>
           }
         />
+
         <Route
           path="/central/moviles"
           element={
@@ -101,6 +116,7 @@ function Main() {
             </PrivateGuard>
           }
         />
+
         <Route
           path="/central/mapa"
           element={
